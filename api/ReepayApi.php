@@ -160,4 +160,42 @@ class ReepayApi
         $result = json_decode(curl_exec($ch));
         return $result;
     }
+    
+    public static function getWebhookSettings()
+    {
+        $ch = ReepayApi::curlSession();
+        curl_setopt($ch, CURLOPT_URL, 'https://api.reepay.com/v1/account/webhook_settings');
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
+
+        $result = json_decode(curl_exec($ch));
+        return $result;
+    }
+
+    public static function updateWebhookSettings($data)
+    {
+        $ch = ReepayApi::curlSession();
+
+        $dataJson = json_encode($data);
+
+        curl_setopt($ch, CURLOPT_URL, 'https://api.reepay.com/v1/account/webhook_settings');
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $dataJson);
+        curl_setopt(
+            $ch,
+            CURLOPT_HTTPHEADER,
+            array(
+                'Content-Type: application/json',
+                'Content-Length: ' . Tools::strlen($dataJson)
+            )
+        );
+
+        $result = curl_exec($ch);
+
+        $error = curl_error($ch);
+
+        $result = json_decode(curl_exec($ch));
+        return $result;
+    }
+
 }

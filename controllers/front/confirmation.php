@@ -32,24 +32,42 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
             die("Reepay not enabled");
         }
 
-        $invoiceId = Tools::getValue('invoice');
+        $cart = new Cart(Tools::getValue('invoice'));
 
-
-        $session = ReepayApi::getChargeSession($invoiceId);
-        $cart = $this->context->cart;
         $customer = new Customer($cart->id_customer);
-        if (!Validate::isLoadedObject($customer) || !Validate::isLoadedObject($cart)) {
-            Tools::redirect('index.php?controller=order&step=1');
+
+        // order hasn't been placed with webhook yet
+        if (!$cart->orderExists()) {
+
+            $invoiceId = Tools::getValue('invoice');
+            $session = ReepayApi::getChargeSession($invoiceId);
+
+            if (!Validate::isLoadedObject($customer) || !Validate::isLoadedObject($cart)) {
+                Tools::redirect('index.php?controller=order&step=1');
+            }
+
+            $currency = $this->context->currency;
+            $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
+
+            if ($session->state == "authorized") {
+                $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int)$currency->id, false, $customer->secure_key);
+                ModuleService::logTransaction($this->module->version);
+            }
+
+            Tools::redirect('index.php?controller=order-confirmation&id_cart=' .
+                (int)$cart->id . '&id_module=' .
+                (int)$this->module->id . '&id_order=' .
+                $this->module->currentOrder . '&key=' .
+                $customer->secure_key);
+
+        }else {
+
+         Tools::redirect('index.php?controller=order-confirmation&id_cart=' .
+             (int)$cart->id . '&id_module=' .
+             (int)$this->module->id . '&id_order=' .
+             $this->module->currentOrder . '&key=' .
+             $customer->secure_key);
+
         }
-
-        $currency = $this->context->currency;
-        $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
-
-        if ($session->state == "authorized") {
-            $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int) $currency->id, false, $customer->secure_key);
-            ModuleService::logTransaction($this->module->version);
-        }
-
-        Tools::redirect('index.php?controller=order-confirmation&id_cart='.(int)$cart->id.'&id_module='.(int)$this->module->id.'&id_order='.$this->module->currentOrder.'&key='.$customer->secure_key);
     }
 }

@@ -34,7 +34,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.1.1';
+        $this->version = '1.1.2';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -168,6 +168,30 @@ class Reepay extends PaymentModule
             } else {
                 $output .= $this->displayError(json_encode("The entered API key is invalid"));
             }
+
+            // update/set webhooks
+            $result = ReepayApi::getWebhookSettings();
+            $urls = $result->urls;
+            $urls[] = $this->context->link->getModuleLink('reepay', 'notification', [], true);
+            $alert_emails = $result->alert_emails;
+            $alert_emails[] = Configuration::get('PS_SHOP_EMAIL');
+            $event_types = $result->event_types;
+            $event_types[] = 'invoice_authorized';
+            $data = array(
+                'urls'         => array_unique( $urls ),
+                'disabled'     => false,
+                'alert_emails' => array_unique( $alert_emails ),
+                'event_types' => array_unique( $event_types )
+            );
+
+            $result = ReepayApi::updateWebhookSettings($data);
+
+            if(!isset($result->error) ) {
+                $output .= $this->displayConfirmation($this->l('Webhook settings has been updated'));
+            }else {
+                $output .= $this->displayError('Error during updating webhooks: ' . $result->message);
+            }
+
         }
 
         if (ModuleService::checkIfNewerVersion($this->version)) {
