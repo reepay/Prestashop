@@ -34,7 +34,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.1.2';
+        $this->version = '1.1.3';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -91,6 +91,8 @@ class Reepay extends PaymentModule
             $this->registerHook('displayPayment') &&
             $this->registerHook('actionOrderStatusUpdate') &&
             $this->registerHook('displayAdminOrderContentOrder') &&
+            $this->registerHook('displayAdminOrderTabContent') &&
+
             $this->_createAjaxController();
 
         if ($success) {
@@ -403,7 +405,13 @@ class Reepay extends PaymentModule
 
     public function hookDisplayAdminOrderContentOrder($params)
     {
-        if ($params['order']->module != $this->name) {
+        if (version_compare(_PS_VERSION_, '1.7.7.4', '>=')) {
+            $order = new Order($params['id_order']);
+        } else {
+            $order = $params['order'];
+        }
+
+        if($order->module != $this->name) {
             return "";
         }
 
@@ -411,20 +419,20 @@ class Reepay extends PaymentModule
         $account = ReepayApi::getAccount();
         $dashboardURL = "https://admin.reepay.com/#";
         $dashboardURL .= "/" . $account->handle . "/" . $account->handle;
-        $dashboardURL .= "/invoice/" . $params['order']->id_cart;
+        $dashboardURL .= "/invoice/" . $order->id_cart;
 
 
-        $refundAmountInput = $params['order']->current_state == Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED')
-            ? '<input type="number" step="0.01" max="' . $params['order']->total_paid . '" required class="form-control" name="refundAmount" placeholder="Amount">'
-            : '<input type="number" step="0.01" max="' . $params['order']->total_paid . '" required disabled class="form-control" name="refundAmount" placeholder="Order not settled">';
+        $refundAmountInput = $order->current_state == Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED')
+            ? '<input type="number" step="0.01" max="' . $order->total_paid . '" required class="form-control" name="refundAmount" placeholder="Amount">'
+            : '<input type="number" step="0.01" max="' . $order->total_paid . '" required disabled class="form-control" name="refundAmount" placeholder="Order not settled">';
 
-        $refundButtonDisabled = $params['order']->current_state == Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED')
+        $refundButtonDisabled = $order->current_state == Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED')
             ? ''
             : 'disabled';
 
         $debug = null;
         $events = [];
-        foreach (ReepayApi::getInvoiceEvents($params['order']->id_cart)->content as $key => $event) {
+        foreach (ReepayApi::getInvoiceEvents($order->id_cart)->content as $key => $event) {
             $event_name = $event->event_type;
             switch ($event->event_type) {
                 case 'invoice_created':
@@ -448,6 +456,8 @@ class Reepay extends PaymentModule
             ]);
         }
 
+        $invoice = ReepayApi::getInvoice($order->id_cart);
+
         $this->smarty->assign(array(
             'logoSrc' =>  "/modules/" . $this->name . '/views/img/logo.svg',
             'refundButtonDisabled' => $refundButtonDisabled,
@@ -456,8 +466,9 @@ class Reepay extends PaymentModule
             'formActionURL' => $formActionURL,
             'dashboardURL' => $dashboardURL,
             'formActionURL' => $formActionURL,
-            'orderNumber' => $params['order']->id_cart,
-            'invoice' => ReepayApi::getInvoice($params['order']->id_cart)
+            'orderNumber' => $order->id_cart,
+            'invoice'  => $invoice,
+            'cardLogo' => $this->get_logo($invoice->transactions[0]->card_transaction->card_type)
             // 'debug' => ReepayApi::getInvoice($params['order']->id_cart)->transactions
         ));
 
@@ -469,6 +480,11 @@ class Reepay extends PaymentModule
 
 
         return $output;
+    }
+
+    public function hookDisplayAdminOrderTabContent($params)
+    {
+        return $this->hookDisplayAdminOrderContentOrder($params);
     }
 
     public function hookDisplayPayment()
@@ -508,5 +524,72 @@ class Reepay extends PaymentModule
         ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
 
         return $this->display(__FILE__, 'views/templates/hook/confirmation.tpl');
+    }
+
+    public function get_logo( $card_type ) {
+        switch ( $card_type ) {
+            case 'visa':
+                $image = 'visa.png';
+                break;
+            case 'mc':
+                $image = 'mastercard.png';
+                break;
+            case 'dankort':
+            case 'visa_dk':
+                $image = 'dankort.png';
+                break;
+            case 'ffk':
+                $image = 'forbrugsforeningen.png';
+                break;
+            case 'visa_elec':
+                $image = 'visa-electron.png';
+                break;
+            case 'maestro':
+                $image = 'maestro.png';
+                break;
+            case 'amex':
+                $image = 'american-express.png';
+                break;
+            case 'diners':
+                $image = 'diners.png';
+                break;
+            case 'discover':
+                $image = 'discover.png';
+                break;
+            case 'jcb':
+                $image = 'jcb.png';
+                break;
+            case 'mobilepay':
+                $image = 'mobilepay.png';
+                break;
+            case 'viabill':
+                $image = 'viabill.png';
+                break;
+            case 'klarna_pay_later':
+            case 'klarna_pay_now':
+                $image = 'klarna.png';
+                break;
+            case 'resurs':
+                $image = 'resurs.png';
+                break;
+            case 'china_union_pay':
+                $image = 'cup.png';
+                break;
+            case 'paypal':
+                $image = 'paypal.png';
+                break;
+            case 'applepay':
+                $image = 'applepay.png';
+                break;
+            case 'googlepay':
+                $image = 'googlepay.png';
+                break;
+            case 'vipps':
+                $image = 'vipps.png';
+                break;
+        }
+            if( $image ) {
+                return '/modules/' . $this->name . '/views/img/' . $image;
+            }
     }
 }

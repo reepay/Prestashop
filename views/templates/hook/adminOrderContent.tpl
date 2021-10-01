@@ -19,6 +19,52 @@
   display: none;
 }
 </style>
+
+<div class="card-1 no-print">
+
+    <div class="card-header">
+        <h3 class="card-header-title">
+            Payment details
+        </h3>
+    </div>
+
+<div class="payment-details">
+
+    <div class="payment-details-figures" style="margin-left: 10px; float:left;">
+        <strong>Status</strong>
+        <p class="mb-0">{$invoice->state}</p>
+        <strong>Order id</strong>
+        <p class="mb-0">{$invoice->handle}</p>
+        <strong>Invoice id</strong>
+        <p class="mb-0"> {$invoice->id}</p>
+
+        {if $invoice->transactions[0]->card_transaction->card_type}
+            <strong>Card</strong>
+            <p class="mb-0"> {$invoice->transactions[0]->card_transaction->card_type}</p>
+            <strong>Masked card</strong>
+            <p class="mb-0"> {$invoice->transactions[0]->card_transaction->masked_card}</p>
+            <br/>
+            {if $cardLogo}
+                <img src="{$cardLogo}"/>
+            {/if}
+        {/if}
+    </div>
+
+    <div style="float:right; margin-right: 35%">
+        <strong>amount</strong>
+        <p class="mb-0"> {{$invoice->amount/100}} </p>
+        <strong>Authorized amount</strong>
+        <p class="mb-0"> {{$invoice->authorized_amount/100}} </p>
+        <strong>Settled amount</strong>
+        <p class="mb-0"> {{$invoice->settled_amount/100}} </p>
+        <strong>Refunded amount</strong>
+        <p class="mb-0"> {{$invoice->refunded_amount/100}} </p>
+    </div>
+    <div style="clear: both;"></div>
+</div>
+
+</div>
+
 <div  class="card-1 no-print">
     <img src="{$logoSrc}"/>
     <form class="form-inline pull-right" action="{$formActionURL}" method="POST">

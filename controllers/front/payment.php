@@ -24,7 +24,6 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
     public function postProcess()
     {
 
-        xdebug_break();
         $enabled = Configuration::get('REEPAY_ENABLED');
         if (!$enabled) {
             die("Reepay not enabled");
