@@ -20,51 +20,21 @@
     <input type="hidden" id="orderConfirmationURL" value="{$orderConfirmationURL}" />
     
     <div id='rp_container' style="width: 100%; height: 640px;"></div>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-polyfill/7.4.4/polyfill.min.js"></script>
     <script src="https://checkout.reepay.com/checkout.js"></script>
-    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script>
-      var rp = new Reepay.WindowCheckout('{$chargeSession->id}');
-      var confirmURL = document.querySelector('#confirmURL').value
-      var orderConfirmationURL = document.querySelector('#orderConfirmationURL').value
-
+      const rp = new Reepay.ModalCheckout('{$chargeSession->id}');
       rp.addEventHandler(Reepay.Event.Accept, function(data) {
-        
-        var formData = new FormData();
-        formData.append('invoice', data.invoice)
-        
-        
-        axios.post(confirmURL, formData).then(function(res) {
-          
-        
-        Swal.fire({
-          title: '{$loadingText}',
-          allowEscapeKey: false,
-          allowOutsideClick: false,
-          onOpen: function ()
-          {
-            Swal.showLoading();
-          }
-        })
-
-
-          if(res.data.status == "authorized"){
-            window.location.replace(orderConfirmationURL);
-          }
-        }).catch(function(err) {
-          console.log(err)
-        })
+        const confirmationUrl = '{$confirmURL}?id=' + data.id + '&invoice=' + data.invoice + '&customer=' + data.customer;
+        window.location.replace(confirmationUrl);
       });
 
       rp.addEventHandler(Reepay.Event.Error, function(data) {
         console.log('Error', data);
       });
 
-      rp.addEventHandler(Reepay.Event.Close, function(data) {
-        console.log('Close',data);
+      rp.addEventHandler(Reepay.Event.Cancel, function(data) {
+        window.location.replace('{$confirmURL}');
       });
-
     </script>
   </section>
 {/block}

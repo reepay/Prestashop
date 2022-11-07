@@ -28,13 +28,11 @@ include_once _PS_MODULE_DIR_ . 'reepay/service/ModuleService.php';
 
 class Reepay extends PaymentModule
 {
-    protected $config_form = false;
-
     public function __construct()
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.1.3';
+        $this->version = '1.2.0';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -261,6 +259,27 @@ class Reepay extends PaymentModule
                         'label' => $this->l('Private API Key'),
                         'desc' => $this->l('You can find this at your Reepay Dashboard under "Developers" >> "API Credentials"'),
                     ),
+
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Checkout type'),
+                        'name' => 'REEPAY_CHECKOUT_TYPE',
+                        'desc' => $this->l('Choose embedded or redirect window checkout type'),
+                        'options' => [
+                            'query' => [
+                                [
+                                    'id' => 'embedded',
+                                    'name' => 'Embedded'
+                                ],
+                                [
+                                    'id' => 'window',
+                                    'name' => 'Window'
+                                ],
+                            ],
+                            'id' => 'id',
+                            'name' => 'name',
+                        ],
+                      ),
                     array(
                         'type' => 'switch',
                         'label' => $this->l('Reepay enabled'),
@@ -321,13 +340,14 @@ class Reepay extends PaymentModule
      */
     protected function getConfigFormValues()
     {
-        return array(
-            'REEPAY_ENABLED' => Configuration::get('REEPAY_ENABLED', false),
-            'REEPAY_PRIVATE_API_KEY' => Configuration::get('REEPAY_PRIVATE_API_KEY'),
-            'REEPAY_OPTION_TEXT' => Configuration::get('REEPAY_OPTION_TEXT'),
-            'REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED' => Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
-            'REEPAY_ORDER_STATUS_REEPAY_SETTLED' => Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED'),
-        );
+         return array(
+                'REEPAY_ENABLED' => Configuration::get('REEPAY_ENABLED', false),
+                'REEPAY_PRIVATE_API_KEY' => Configuration::get('REEPAY_PRIVATE_API_KEY'),
+                'REEPAY_OPTION_TEXT' => Configuration::get('REEPAY_OPTION_TEXT'),
+                'REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED' => Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
+                'REEPAY_ORDER_STATUS_REEPAY_SETTLED' => Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED'),
+                'REEPAY_CHECKOUT_TYPE' => Configuration::get('REEPAY_CHECKOUT_TYPE')
+             );
     }
 
     /**

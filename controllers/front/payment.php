@@ -29,9 +29,7 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
             die("Reepay not enabled");
         }
 
-
         $cart = $this->context->cart;
-        $customer = $this->context->customer;
 
         if ($cart->id_customer == 0 || $cart->id_address_delivery == 0 || $cart->id_address_invoice == 0 || !$this->module->active) {
             Tools::redirect('index.php?controller=order&step=1');
@@ -87,18 +85,21 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         if (isset($chargeSession->error)) {
             Tools::redirect($this->context->link->getPageLink('order') . '?step=1');
         }
-        if (PS_1_6) {
-            $this->setTemplate('payment_embedded.tpl');
-        }
-        if (PS_1_7) {
-            $this->setTemplate('module:reepay/views/templates/front/payment_embedded_1.7.tpl');
+        if('window' == Configuration::get('REEPAY_CHECKOUT_TYPE')) {
+            Tools::redirect($chargeSession->url);
+        } else {
+           if (PS_1_6) {
+                $this->setTemplate('payment_embedded.tpl');
+            }
+            if (PS_1_7) {
+                $this->setTemplate('module:reepay/views/templates/front/payment_embedded_1.7.tpl');
+            }
+
         }
     }
 
-
     public function createChargeSession()
     {
-
         $customer = $this->context->customer;
         $cart = $this->context->cart;
 
