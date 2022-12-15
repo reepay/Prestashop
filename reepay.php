@@ -32,7 +32,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.2.0';
+        $this->version = '1.2.1';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -90,8 +90,9 @@ class Reepay extends PaymentModule
             $this->registerHook('actionOrderStatusUpdate') &&
             $this->registerHook('displayAdminOrderContentOrder') &&
             $this->registerHook('displayAdminOrderTabContent') &&
+            $this->registerHook('actionValidateOrder');
 
-            $this->_createAjaxController();
+        $this->_createAjaxController();
 
         if ($success) {
             ModuleService::logInstall($this->version);
@@ -126,12 +127,12 @@ class Reepay extends PaymentModule
         $tab->class_name = 'AdminReepay';
         $tab->module = $this->name;
         $tab->id_parent = -1;
-        return (bool) $tab->save();
+        return (bool)$tab->save();
     }
 
     private function _removeAjaxContoller()
     {
-        if ($tab_id = (int) Tab::getIdFromClassName('AdminReepay')) {
+        if ($tab_id = (int)Tab::getIdFromClassName('AdminReepay')) {
             $tab = new Tab($tab_id);
             $tab->delete();
         }
@@ -159,9 +160,9 @@ class Reepay extends PaymentModule
         /**
          * If values have been submitted in the form, process.
          */
-        if (((bool) Tools::isSubmit('submitReepayModule')) == true) {
+        if (((bool)Tools::isSubmit('submitReepayModule')) == true) {
             $this->postProcess();
-            $privateApiKey = trim((string) (Tools::getValue('REEPAY_PRIVATE_API_KEY')));
+            $privateApiKey = trim((string)(Tools::getValue('REEPAY_PRIVATE_API_KEY')));
             if (ReepayApi::checkPrivateApiKey($privateApiKey)) {
                 Configuration::updateValue('REEPAY_PRIVATE_API_KEY', $privateApiKey);
                 $output .= $this->displayConfirmation($this->l('Private API Key Validated!'));
@@ -178,17 +179,17 @@ class Reepay extends PaymentModule
             $event_types = $result->event_types;
             $event_types[] = 'invoice_authorized';
             $data = array(
-                'urls'         => array_unique( $urls ),
-                'disabled'     => false,
-                'alert_emails' => array_unique( $alert_emails ),
-                'event_types' => array_unique( $event_types )
+                'urls' => array_unique($urls),
+                'disabled' => false,
+                'alert_emails' => array_unique($alert_emails),
+                'event_types' => array_unique($event_types)
             );
 
             $result = ReepayApi::updateWebhookSettings($data);
 
-            if(!isset($result->error) ) {
+            if (!isset($result->error)) {
                 $output .= $this->displayConfirmation($this->l('Webhook settings has been updated'));
-            }else {
+            } else {
                 $output .= $this->displayError('Error during updating webhooks: ' . $result->message);
             }
 
@@ -279,7 +280,7 @@ class Reepay extends PaymentModule
                             'id' => 'id',
                             'name' => 'name',
                         ],
-                      ),
+                    ),
                     array(
                         'type' => 'switch',
                         'label' => $this->l('Reepay enabled'),
@@ -310,7 +311,7 @@ class Reepay extends PaymentModule
                         'label' => $this->l('Status: Reepay Authorized'),
                         'name' => 'REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED',
                         'options' => array(
-                            'query' => OrderState::getOrderStates((int) Configuration::get('PS_LANG_DEFAULT')),
+                            'query' => OrderState::getOrderStates((int)Configuration::get('PS_LANG_DEFAULT')),
                             'id' => 'id_order_state',
                             'name' => 'name',
                             'desc' => 'The default other state'
@@ -321,7 +322,7 @@ class Reepay extends PaymentModule
                         'label' => $this->l('Status: Reepay Settled'),
                         'name' => 'REEPAY_ORDER_STATUS_REEPAY_SETTLED',
                         'options' => array(
-                            'query' => OrderState::getOrderStates((int) Configuration::get('PS_LANG_DEFAULT')),
+                            'query' => OrderState::getOrderStates((int)Configuration::get('PS_LANG_DEFAULT')),
                             'id' => 'id_order_state',
                             'name' => 'name',
                             'desc' => 'Orders changed to this status will automatically be settled in reepay'
@@ -340,14 +341,14 @@ class Reepay extends PaymentModule
      */
     protected function getConfigFormValues()
     {
-         return array(
-                'REEPAY_ENABLED' => Configuration::get('REEPAY_ENABLED', false),
-                'REEPAY_PRIVATE_API_KEY' => Configuration::get('REEPAY_PRIVATE_API_KEY'),
-                'REEPAY_OPTION_TEXT' => Configuration::get('REEPAY_OPTION_TEXT'),
-                'REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED' => Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
-                'REEPAY_ORDER_STATUS_REEPAY_SETTLED' => Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED'),
-                'REEPAY_CHECKOUT_TYPE' => Configuration::get('REEPAY_CHECKOUT_TYPE')
-             );
+        return array(
+            'REEPAY_ENABLED' => Configuration::get('REEPAY_ENABLED', false),
+            'REEPAY_PRIVATE_API_KEY' => Configuration::get('REEPAY_PRIVATE_API_KEY'),
+            'REEPAY_OPTION_TEXT' => Configuration::get('REEPAY_OPTION_TEXT'),
+            'REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED' => Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
+            'REEPAY_ORDER_STATUS_REEPAY_SETTLED' => Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED'),
+            'REEPAY_CHECKOUT_TYPE' => Configuration::get('REEPAY_CHECKOUT_TYPE')
+        );
     }
 
     /**
@@ -431,7 +432,7 @@ class Reepay extends PaymentModule
             $order = $params['order'];
         }
 
-        if($order->module != $this->name) {
+        if ($order->module != $this->name) {
             return "";
         }
 
@@ -479,7 +480,7 @@ class Reepay extends PaymentModule
         $invoice = ReepayApi::getInvoice($order->id_cart);
 
         $this->smarty->assign(array(
-            'logoSrc' =>  "/modules/" . $this->name . '/views/img/logo.svg',
+            'logoSrc' => "/modules/" . $this->name . '/views/img/logo.svg',
             'refundButtonDisabled' => $refundButtonDisabled,
             'refundAmountInput' => $refundAmountInput,
             'dashboardURL' => $dashboardURL,
@@ -487,7 +488,7 @@ class Reepay extends PaymentModule
             'dashboardURL' => $dashboardURL,
             'formActionURL' => $formActionURL,
             'orderNumber' => $order->id_cart,
-            'invoice'  => $invoice,
+            'invoice' => $invoice,
             'cardLogo' => $this->get_logo($invoice->transactions[0]->card_transaction->card_type)
             // 'debug' => ReepayApi::getInvoice($params['order']->id_cart)->transactions
         ));
@@ -546,8 +547,23 @@ class Reepay extends PaymentModule
         return $this->display(__FILE__, 'views/templates/hook/confirmation.tpl');
     }
 
-    public function get_logo( $card_type ) {
-        switch ( $card_type ) {
+    public function hookActionValidateOrder($data)
+    {
+        $order = $data['order'];
+        if($order->module == 'reepay') {
+            $orderPayments = $order->getOrderPayments();
+            $op = current($orderPayments);
+            $session = ReepayApi::getChargeSession($order->id_cart);
+            $op->card_brand = isset($session->source->transaction_card_type) ? $session->source->transaction_card_type : null;
+            $op->card_number = isset($session->source->masked_card) ? $session->source->masked_card : null;
+            $op->card_expiration = isset($session->source->exp_date) ? $session->source->exp_date : null;
+            $op->save();
+        }
+    }
+
+    public function get_logo($card_type)
+    {
+        switch ($card_type) {
             case 'visa':
                 $image = 'visa.png';
                 break;
@@ -608,8 +624,8 @@ class Reepay extends PaymentModule
                 $image = 'vipps.png';
                 break;
         }
-            if( $image ) {
-                return '/modules/' . $this->name . '/views/img/' . $image;
-            }
+        if ($image) {
+            return '/modules/' . $this->name . '/views/img/' . $image;
+        }
     }
 }
