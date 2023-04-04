@@ -32,7 +32,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.2.1';
+        $this->version = '1.2.2';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -557,6 +557,7 @@ class Reepay extends PaymentModule
             $op->card_brand = isset($session->source->transaction_card_type) ? $session->source->transaction_card_type : null;
             $op->card_number = isset($session->source->masked_card) ? $session->source->masked_card : null;
             $op->card_expiration = isset($session->source->exp_date) ? $session->source->exp_date : null;
+            $op->transaction_id = $session->handle;
             $op->save();
         }
     }

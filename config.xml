@@ -2,7 +2,7 @@
 <module>
     <name>reepay</name>
     <displayName><![CDATA[Reepay Payment Gateway]]></displayName>
-    <version><![CDATA[1.2.1]]></version>
+    <version><![CDATA[1.2.2]]></version>
     <description><![CDATA[Reepay integration for Prestashop 1.6  / 1.7 developed by LittleGiants]]></description>
     <author><![CDATA[LittleGiants]]></author>
     <tab><![CDATA[payments_gateways]]></tab>
