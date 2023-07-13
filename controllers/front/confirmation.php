@@ -29,7 +29,7 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
         $enabled = Configuration::get('REEPAY_ENABLED');
 
         if (!$enabled) {
-            die("Reepay not enabled");
+            die("Billwerk+ Payments not enabled");
         }
 
         $cart = new Cart(Tools::getValue('invoice'));

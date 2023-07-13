@@ -26,7 +26,7 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
 
         $enabled = Configuration::get('REEPAY_ENABLED');
         if (!$enabled) {
-            die("Reepay not enabled");
+            die("Billwerk+ Payments not enabled");
         }
 
         $cart = $this->context->cart;

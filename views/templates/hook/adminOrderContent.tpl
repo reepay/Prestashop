@@ -75,7 +75,7 @@
         {$refundAmountInput}
         </div>
         <button type="submit" class="btn btn-default {$refundButtonDisabled}">Refund order</button>
-        <a target="_BLANK" href="{$dashboardURL}" class="btn btn-default">{l s='View order in Reepay' mod='reepay'}</a>
+        <a target="_BLANK" href="{$dashboardURL}" class="btn btn-default">{l s='View order in Billwerk+ Payments' mod='reepay'}</a>
     </form>
     <table class="table">
         <thead>

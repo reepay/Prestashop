@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <module>
 	<name>reepay</name>
-	<displayName><![CDATA[Reepay Payment Gateway]]></displayName>
+	<displayName><![CDATA[Billwerk+ Payments]]></displayName>
 	<version><![CDATA[1.2.0]]></version>
-	<description><![CDATA[Reepay integration for Prestashop 1.6  / 1.7 developed by LittleGiants]]></description>
+	<description><![CDATA[Billwerk+ Payments integration for Prestashop 1.6  / 1.7 developed by LittleGiants]]></description>
 	<author><![CDATA[LittleGiants]]></author>
 	<tab><![CDATA[payments_gateways]]></tab>
-	<confirmUninstall><![CDATA[Are you sure you want to uninstall Reepay? All of the settings will be removed]]></confirmUninstall>
+	<confirmUninstall><![CDATA[Are you sure you want to uninstall Billwerk+ Payments? All of the settings will be removed]]></confirmUninstall>
 	<is_configurable>1</is_configurable>
 	<need_instance>0</need_instance>
 	<limited_countries></limited_countries>
