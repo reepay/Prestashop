@@ -90,11 +90,9 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         } else {
            if (PS_1_6) {
                 $this->setTemplate('payment_embedded.tpl');
-            }
-            if (PS_1_7) {
+            } else {
                 $this->setTemplate('module:reepay/views/templates/front/payment_embedded_1.7.tpl');
-            }
-
+           }
         }
     }
 

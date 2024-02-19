@@ -32,7 +32,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.2.3';
+        $this->version = '1.2.4';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -44,7 +44,7 @@ class Reepay extends PaymentModule
         parent::__construct();
 
         $this->displayName = $this->l('Billwerk+ Payments');
-        $this->description = $this->l('Billwerk+ Payments integration for Prestashop 1.6  / 1.7 developed by LittleGiants');
+        $this->description = $this->l('Billwerk+ Payments integration for Prestashop 1.6  / 1.7 / 8 / developed by LittleGiants');
 
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall Billwerk+ Payments? All of the settings will be removed');
 
@@ -83,7 +83,7 @@ class Reepay extends PaymentModule
         }
         $success =
             $this->registerHook('header') &&
-            $this->registerHook('backOfficeHeader') &&
+            $this->registerHook('displayBackOfficeHeader') &&
             $this->registerHook('paymentOptions') &&
             $this->registerHook('payment') &&
             $this->registerHook('displayPayment') &&
