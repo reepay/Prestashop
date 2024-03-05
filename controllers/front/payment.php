@@ -117,7 +117,8 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
                     "email" => $customer->email,
                     "handle" => "c_" . $customer->id,
                     "first_name" => $customer->firstname,
-                    "last_name" => $customer->lastname
+                    "last_name" => $customer->lastname,
+                    "country" => $billingCountryIso
                 ],
                 "billing_address" => [
                     "address" => $billingAddress->address1 . " " . $billingAddress->address2,
