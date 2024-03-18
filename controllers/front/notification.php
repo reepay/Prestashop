@@ -13,8 +13,9 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
             $webhook_body = file_get_contents('php://input');
             $webhook_body = json_decode($webhook_body, JSON_PRETTY_PRINT);
 
+            $event_array = ['invoice_authorized', 'invoice_settled'];
             if ($webhook_body !== FALSE) {
-                if (isset($webhook_body['invoice']) && 'invoice_authorized' == $webhook_body['event_type']) {
+                if (isset($webhook_body['invoice']) && in_array($webhook_body['event_type'] ,$event_array)) {
                         $id_cart = $webhook_body['invoice'];
                         if (isset($id_cart) AND (int)$id_cart > 0) {
                             $cart = new Cart($id_cart);

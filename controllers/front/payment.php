@@ -102,11 +102,10 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         $cart = $this->context->cart;
 
         $deliveryAddress = new Address(intval($cart->id_address_delivery));
-        $deliveryCountryId = Country::getIdByName($this->context->language->id, $deliveryAddress->country);
-        $deliveryCountryIso = Country::getIsoById($deliveryCountryId);
         $billingAddress = new Address(intval($cart->id_address_invoice));
-        $billingCountryId = Country::getIdByName($this->context->language->id, $billingAddress->country);
-        $billingCountryIso = Country::getIsoById($billingCountryId);
+        $address_delivery = new Address($cart->id_address_delivery);
+        $address_delivery_country = new Country($address_delivery->id_country);
+        $iso_code = $address_delivery_country->iso_code;
 
         $data = array(
             "order" => [
@@ -118,12 +117,12 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
                     "handle" => "c_" . $customer->id,
                     "first_name" => $customer->firstname,
                     "last_name" => $customer->lastname,
-                    "country" => $billingCountryIso
+                    "country" => $iso_code
                 ],
                 "billing_address" => [
                     "address" => $billingAddress->address1 . " " . $billingAddress->address2,
                     "city" => $billingAddress->city,
-                    "country" => $billingCountryIso,
+                    "country" => $iso_code,
                     "email" => $customer->email,
                     "first_name" => $billingAddress->firstname,
                     "last_name" => $billingAddress->lastname,
@@ -133,7 +132,7 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
                 "shipping_address" => [
                     "address" => $deliveryAddress->address1 . " " . $deliveryAddress->address2,
                     "city" => $deliveryAddress->city,
-                    "country" => $deliveryCountryIso,
+                    "country" => $iso_code,
                     "email" => $customer->email,
                     "first_name" => $deliveryAddress->firstname,
                     "last_name" => $deliveryAddress->lastname,
