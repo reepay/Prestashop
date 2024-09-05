@@ -177,7 +177,7 @@ class Reepay extends PaymentModule
             $alert_emails = $result->alert_emails;
             $alert_emails[] = Configuration::get('PS_SHOP_EMAIL');
             $event_types = $result->event_types;
-            $event_types[] = 'invoice_authorized';
+            $event_types = array_merge($event_types, ['invoice_authorized', 'invoice_settled']);
             $data = array(
                 'urls' => array_unique($urls),
                 'disabled' => false,
