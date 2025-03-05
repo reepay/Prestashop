@@ -32,7 +32,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.2.6';
+        $this->version = '1.2.7';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -480,7 +480,7 @@ class Reepay extends PaymentModule
         $invoice = ReepayApi::getInvoice($order->id_cart);
 
         $this->smarty->assign(array(
-            'logoSrc' => "/modules/" . $this->name . '/views/img/logo.svg',
+            'logoSrc' => "/modules/" . $this->name . '/views/img/logo.png',
             'refundButtonDisabled' => $refundButtonDisabled,
             'refundAmountInput' => $refundAmountInput,
             'dashboardURL' => $dashboardURL,

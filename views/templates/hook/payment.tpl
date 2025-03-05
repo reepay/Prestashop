@@ -16,7 +16,7 @@
 	<div class="col-xs-12 col-md-12">
 		<p class="payment_module" id="reepay_payment_button">
 			<a href="{$link->getModuleLink('reepay', 'payment', array(), true)|escape:'htmlall':'UTF-8'}" title="{$paymentOptionText}">
-				<img src="{$module_dir|escape:'htmlall':'UTF-8'}/views/img/logo.svg" alt="{$paymentOptionText}" height="32" />
+				<img src="{$module_dir|escape:'htmlall':'UTF-8'}/views/img/logo.png" alt="{$paymentOptionText}" height="32" />
 				{$paymentOptionText}
 			</a>
 		</p>
