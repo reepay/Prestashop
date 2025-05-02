@@ -32,7 +32,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.2.8';
+        $this->version = '1.2.9';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -94,9 +94,9 @@ class Reepay extends PaymentModule
 
         $this->_createAjaxController();
 
-        if ($success) {
+        /*if ($success) {
             ModuleService::logInstall($this->version);
-        }
+        }*/
 
         return $success;
     }
@@ -107,7 +107,7 @@ class Reepay extends PaymentModule
 
         include(dirname(__FILE__) . '/sql/uninstall.php');
 
-        ModuleService::logUninstall("N/A");
+        /*ModuleService::logUninstall("N/A");*/
 
         return parent::uninstall();
     }

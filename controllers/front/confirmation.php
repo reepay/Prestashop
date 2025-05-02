@@ -51,7 +51,7 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
 	    if ($session->state == "authorized" || $session->state == "settled") {
           		
             $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int)$currency->id, false, $customer->secure_key);
-            ModuleService::logTransaction($this->module->version);
+            //ModuleService::logTransaction($this->module->version);
 	    }
             Tools::redirect('index.php?controller=order-confirmation&id_cart=' .
                 (int)$cart->id . '&id_module=' .
