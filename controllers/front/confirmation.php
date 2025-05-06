@@ -15,7 +15,6 @@
  */
 
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
-include_once _PS_MODULE_DIR_ . 'reepay/service/ModuleService.php';
 
 class ReepayConfirmationModuleFrontController extends ModuleFrontController
 {

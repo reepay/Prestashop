@@ -24,7 +24,6 @@ if (!defined('_PS_VERSION_')) {
 
 
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
-include_once _PS_MODULE_DIR_ . 'reepay/service/ModuleService.php';
 
 class Reepay extends PaymentModule
 {
@@ -32,7 +31,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.2.9';
+        $this->version = '1.3.0';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -94,10 +93,6 @@ class Reepay extends PaymentModule
 
         $this->_createAjaxController();
 
-        /*if ($success) {
-            ModuleService::logInstall($this->version);
-        }*/
-
         return $success;
     }
 
@@ -106,8 +101,6 @@ class Reepay extends PaymentModule
         Configuration::deleteByName('REEPAY_LIVE_MODE');
 
         include(dirname(__FILE__) . '/sql/uninstall.php');
-
-        /*ModuleService::logUninstall("N/A");*/
 
         return parent::uninstall();
     }
@@ -194,10 +187,6 @@ class Reepay extends PaymentModule
             }
 
         }
-
-        /*  if (ModuleService::checkIfNewerVersion($this->version)) {
-            $output .= $this->updateNotice();
-        }*/
 
         return $output . $this->renderForm();
     }
@@ -494,9 +483,6 @@ class Reepay extends PaymentModule
         ));
 
         $output = "";
-        /*if (ModuleService::checkIfNewerVersion($this->version)) {
-            $output .= $this->updateNotice();
-        }*/
         $output .= $this->display(__FILE__, 'views/templates/hook/adminOrderContent.tpl');
 
 
