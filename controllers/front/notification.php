@@ -33,7 +33,7 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                             } else {
                                 $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
                                     $total, $this->module->displayName, null, null,
-                                    null, false, $customer->secure_key);
+                                    $cart->id_currency, false, $customer->secure_key);
                                 die('Order has been placed with webhook');
                         }
                     }
