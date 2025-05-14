@@ -31,7 +31,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.3.0';
+        $this->version = '1.3.2';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
