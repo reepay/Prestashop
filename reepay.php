@@ -31,7 +31,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.3.2';
+        $this->version = '1.3.3';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -42,10 +42,10 @@ class Reepay extends PaymentModule
 
         parent::__construct();
 
-        $this->displayName = $this->l('Billwerk+ Payments');
-        $this->description = $this->l('Billwerk+ Payments integration for Prestashop 1.6  / 1.7 / 8 / developed by LittleGiants');
+        $this->displayName = $this->l('Frisbii Payments');
+        $this->description = $this->l('Frisbii Payments integration for Prestashop 1.6  / 1.7 / 8 / developed by LittleGiants');
 
-        $this->confirmUninstall = $this->l('Are you sure you want to uninstall Billwerk+ Payments? All of the settings will be removed');
+        $this->confirmUninstall = $this->l('Are you sure you want to uninstall Frisbii Payments? All of the settings will be removed');
 
         $this->ps_versions_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
     }
@@ -64,7 +64,7 @@ class Reepay extends PaymentModule
         $iso_code = Country::getIsoById(Configuration::get('PS_COUNTRY_DEFAULT'));
 
         Configuration::updateValue('REEPAY_ENABLED', false);
-        Configuration::updateValue('REEPAY_OPTION_TEXT', 'Credit card with Billwerk+ Payments');
+        Configuration::updateValue('REEPAY_OPTION_TEXT', 'Credit card with Frisbii Payments');
 
         Configuration::updateValue('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED', $this->getOrderStatusIdByName("Payment accepted"));
         Configuration::updateValue('REEPAY_ORDER_STATUS_REEPAY_SETTLED', $this->getOrderStatusIdByName("Shipped"));
@@ -148,6 +148,7 @@ class Reepay extends PaymentModule
     {
         $this->context->smarty->assign('module_dir', $this->_path);
         $this->context->smarty->assign('account', ReepayAPI::getAccount());
+        $this->context->smarty->assign('time', time());
         $output = $this->context->smarty->fetch($this->local_path . 'views/templates/admin/configure.tpl');
 
         /**
@@ -197,7 +198,7 @@ class Reepay extends PaymentModule
         return $this->displayInformation("
                 There is a new update avaiable: <b>v$latest</b><br/>After downloading simply install the module as you did in the first place.
                 <br/><br/>
-                <a class='btn btn-default' href='https://reepay.com/download-plugins/' target='_BLANK'>Click here to download the newest version from the Billwerk+ Payments website</a> 
+                <a class='btn btn-default' href='https://reepay.com/download-plugins/' target='_BLANK'>Click here to download the newest version from the Frisbii Payments website</a> 
             ");
     }
 
@@ -247,7 +248,7 @@ class Reepay extends PaymentModule
                         'name' => 'REEPAY_PRIVATE_API_KEY',
                         'prefix' => '<i class="icon icon-key"></i>',
                         'label' => $this->l('Private API Key'),
-                        'desc' => $this->l('You can find this at your Billwerk+ Payments Dashboard under "Developers" >> "API Credentials"'),
+                        'desc' => $this->l('You can find this at your Frisbii Payments Dashboard under "Developers" >> "API Credentials"'),
                     ),
 
                     array(
@@ -272,10 +273,10 @@ class Reepay extends PaymentModule
                     ),
                     array(
                         'type' => 'switch',
-                        'label' => $this->l('Billwerk+ Payments enabled'),
+                        'label' => $this->l('Frisbii Payments enabled'),
                         'name' => 'REEPAY_ENABLED',
                         'is_bool' => true,
-                        'desc' => $this->l('Specifies whether Billwerk+ Payments is enabled as a payment option'),
+                        'desc' => $this->l('Specifies whether Frisbii Payments is enabled as a payment option'),
                         'values' => array(
                             array(
                                 'id' => 'active_on',
@@ -297,7 +298,7 @@ class Reepay extends PaymentModule
                     ),
                     array(
                         'type' => 'select',
-                        'label' => $this->l('Status: Billwerk+ Payments Authorized'),
+                        'label' => $this->l('Status: Frisbii Payments Authorized'),
                         'name' => 'REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED',
                         'options' => array(
                             'query' => OrderState::getOrderStates((int)Configuration::get('PS_LANG_DEFAULT')),
@@ -308,7 +309,7 @@ class Reepay extends PaymentModule
                     ),
                     array(
                         'type' => 'select',
-                        'label' => $this->l('Status: Billwerk+ Payments Settled'),
+                        'label' => $this->l('Status: Frisbii Payments Settled'),
                         'name' => 'REEPAY_ORDER_STATUS_REEPAY_SETTLED',
                         'options' => array(
                             'query' => OrderState::getOrderStates((int)Configuration::get('PS_LANG_DEFAULT')),
@@ -469,7 +470,7 @@ class Reepay extends PaymentModule
         $invoice = ReepayApi::getInvoice($order->id_cart);
 
         $this->smarty->assign(array(
-            'logoSrc' => "/modules/" . $this->name . '/views/img/logo.png',
+            'logoSrc' => "/modules/" . $this->name . '/views/img/logo.23png?t' . time(),
             'refundButtonDisabled' => $refundButtonDisabled,
             'refundAmountInput' => $refundAmountInput,
             'dashboardURL' => $dashboardURL,

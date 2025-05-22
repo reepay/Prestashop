@@ -28,7 +28,7 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
         $enabled = Configuration::get('REEPAY_ENABLED');
 
         if (!$enabled) {
-            die("Billwerk+ Payments not enabled");
+            die("Frisbii Payments not enabled");
         }
 
         $cart = new Cart(Tools::getValue('invoice'));

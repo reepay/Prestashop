@@ -15,11 +15,11 @@
 <div class="panel">
 	<div class="row">
 		<div class="col-md-4 col-lg-3 text-center">
-			<img width="350px" height="100px"  class="m-3" src="{$module_dir|escape:'html':'UTF-8'}views/img/logo.png">
+			<img width="350px" height="100px"  class="m-3" src="{$module_dir|escape:'html':'UTF-8'}views/img/logo.png?t="{{$time}}>
 			<small class="mt-negative">prestashop integration by littleGiants</small>
 		</div>
 		<div class="col-sm-8">
-			<h4>Billwerk+ Payments Account Information</h4>
+			<h4>Frisbii Payments Account Information</h4>
 			<table class="table ">
                 {if isset($account->name) && isset($account->email)}
                     <tbody>
