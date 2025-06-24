@@ -31,7 +31,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.3.3';
+        $this->version = '1.3.4';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -166,12 +166,16 @@ class Reepay extends PaymentModule
 
             // update/set webhooks
             $result = ReepayApi::getWebhookSettings();
-            $urls = $result->urls;
             $urls[] = $this->context->link->getModuleLink('reepay', 'notification', [], true);
             $alert_emails = $result->alert_emails;
             $alert_emails[] = Configuration::get('PS_SHOP_EMAIL');
             $event_types = $result->event_types;
-            $event_types = array_merge($event_types, ['invoice_authorized', 'invoice_settled']);
+            $events_to_store = ['invoice_authorized', 'invoice_settled'];
+            if(is_array($event_types)) {
+                $event_types = array_merge($event_types, $events_to_store);
+            } else {
+                $event_types = $events_to_store;
+            }
             $data = array(
                 'urls' => array_unique($urls),
                 'disabled' => false,
@@ -186,9 +190,7 @@ class Reepay extends PaymentModule
             } else {
                 $output .= $this->displayError('Error during updating webhooks: ' . $result->message);
             }
-
         }
-
         return $output . $this->renderForm();
     }
 
