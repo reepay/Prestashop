@@ -20,12 +20,12 @@
     <input type="hidden" id="orderConfirmationURL" value="{$orderConfirmationURL}" />
     
     <div id='rp_container' style="width: 100%; height: 640px;"></div>
-    <script src="https://checkout.reepay.com/checkout.js"></script>
+    <script src="{$frisbii_checkout_url}"></script>
     <script>
       const rp = new Reepay.ModalCheckout('{$chargeSession->id}');
       rp.addEventHandler(Reepay.Event.Accept, function(data) {
-        const confirmationUrl = '{$confirmURL}?id=' + data.id + '&invoice=' + data.invoice + '&customer=' + data.customer;
-        window.location.replace(confirmationUrl);
+        let confirmationUrl = '{$confirmURL}?id=' + data.id + '&invoice=' + data.invoice + '&customer=' + data.customer;
+        window.location.replace(prepareUrl(confirmationUrl));
       });
 
       rp.addEventHandler(Reepay.Event.Error, function(data) {
@@ -33,8 +33,13 @@
       });
 
       rp.addEventHandler(Reepay.Event.Cancel, function(data) {
-        window.location.replace('{$confirmURL}');
+          let confirmationUrl = '{$confirmURL}';
+          window.location.replace(prepareUrl(confirmationUrl));
       });
+
+      function prepareUrl(url) {
+          return url.replaceAll('&amp;', '&');
+      }
     </script>
   </section>
 {/block}

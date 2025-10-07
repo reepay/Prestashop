@@ -66,7 +66,7 @@
 </div>
 
 <div  class="card-1 no-print">
-    <img src="{$logoSrc}"/>
+    <img src="{$logoSrc}" alt="Frisbii logo"/>
     <form class="form-inline pull-right" action="{$formActionURL}" method="POST">
         <div class="form-group">
         <label>Refund: </label>

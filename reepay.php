@@ -31,7 +31,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.3.4';
+        $this->version = '1.3.5';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -43,7 +43,7 @@ class Reepay extends PaymentModule
         parent::__construct();
 
         $this->displayName = $this->l('Frisbii Payments');
-        $this->description = $this->l('Frisbii Payments integration for Prestashop 1.6  / 1.7 / 8 / developed by LittleGiants');
+        $this->description = $this->l('Frisbii Payments integration for Prestashop 1.6  / 1.7 / 8 / 9 / developed by LittleGiants');
 
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall Frisbii Payments? All of the settings will be removed');
 
@@ -192,16 +192,6 @@ class Reepay extends PaymentModule
             }
         }
         return $output . $this->renderForm();
-    }
-
-    function updateNotice()
-    {
-        $latest = ModuleService::getLatestVersion();
-        return $this->displayInformation("
-                There is a new update avaiable: <b>v$latest</b><br/>After downloading simply install the module as you did in the first place.
-                <br/><br/>
-                <a class='btn btn-default' href='https://reepay.com/download-plugins/' target='_BLANK'>Click here to download the newest version from the Frisbii Payments website</a> 
-            ");
     }
 
     /**
@@ -362,7 +352,7 @@ class Reepay extends PaymentModule
     {
         $this->context->controller->addJS($this->_path . 'views/js/lib/sweetalert2.js');
         $this->context->controller->addJS($this->_path . 'views/js/back.js');
-        $this->context->controller->addCSS($this->_path . 'views/css/back.css');
+        $this->context->controller->addCSS($this->_path . 'views/css/back.css?t' . time());
     }
 
     /**
@@ -390,7 +380,6 @@ class Reepay extends PaymentModule
         if (!$enabled) {
             return [];
         }
-
 
         $embedded = new PrestaShop\PrestaShop\Core\Payment\PaymentOption();
         $embedded->setCallToActionText(Configuration::get('REEPAY_OPTION_TEXT'))
@@ -462,7 +451,6 @@ class Reepay extends PaymentModule
                     break;
             }
 
-
             array_unshift($events, [
                 "event_name" => $event_name,
                 "event_date" => $event->created
@@ -472,7 +460,7 @@ class Reepay extends PaymentModule
         $invoice = ReepayApi::getInvoice($order->id_cart);
 
         $this->smarty->assign(array(
-            'logoSrc' => "/modules/" . $this->name . '/views/img/logo.23png?t' . time(),
+            'logoSrc' =>  "/modules/" . $this->name . '/views/img/logo.png?' . time(),
             'refundButtonDisabled' => $refundButtonDisabled,
             'refundAmountInput' => $refundAmountInput,
             'dashboardURL' => $dashboardURL,

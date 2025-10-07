@@ -18,6 +18,8 @@ include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
 
 class ReepayPaymentModuleFrontController extends ModuleFrontController
 {
+    const FRISBII_CHECKOUT_URL = 'https://checkout.reepay.com/checkout.js';
+
     /**
      * @see FrontController::postProcess()
      */
@@ -58,7 +60,13 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         $currency = $this->context->currency;
         $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
         $chargeSession = $this->createChargeSession();
-        $order_id = Order::getOrderByCartId((int) $cart->id);
+
+        // make the module compatible with Prestashop version >= 9
+        if(method_exists('Order', 'getIdByCartId')) {
+            $order_id = Order::getIdByCartId((int) $cart->id);
+        } else {
+            $order_id = Order::getOrderByCartId((int) $cart->id);
+        }
 
         if (isset($chargeSession->code) && $chargeSession->code == 105) {
             //Order already paid
@@ -68,18 +76,19 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         }
         $address = new Address(intval($cart->id_address_delivery));
         $confirmationURL = $this->context->link->getPageLink('order-confirmation');
+        $confirmURL = Context::getContext()->link->getModuleLink('reepay', 'confirmation');
         $this->context->smarty->assign([
             'params' => $_REQUEST,
             'chargeSession' => $chargeSession,
             'loadingText' => 'Confirming payment, please wait and do not close this window',
-            'confirmURL' => Context::getContext()->link->getModuleLink('reepay', 'confirmation'),
+            'confirmURL' => $confirmURL,
             'orderConfirmationURL' => $confirmationURL . '?id_cart=' . $cart->id . '&id_module=' . $this->module->id . '&id_order=' . $order_id . '&key=' . $customer->secure_key,
-
             'debug' => [
                 "cart" => $cart,
                 "address" => new Address(intval($cart->id_address_delivery)),
                 "eiewdd" => Country::getIsoById(Country::getIdByName($this->context->language->id, $address->country))
-            ]
+            ],
+            'frisbii_checkout_url' => self::FRISBII_CHECKOUT_URL,
         ]);
 
         if (isset($chargeSession->error)) {
@@ -145,7 +154,6 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         );
 
         $result = ReepayApi::createChargeSession($data);
-
         return $result;
     }
 }
