@@ -11,14 +11,6 @@
  *  @copyright 2019 LittleGiants
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  *}
-<style>
-.product_action,
-#add_voucher,
-#add_product,
-.current-edit.hidden-print {
-  display: none;
-}
-</style>
 
 <div class="card-1 no-print">
 
