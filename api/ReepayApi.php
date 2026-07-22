@@ -29,6 +29,8 @@ class ReepayApi
         curl_setopt($ch, CURLOPT_USERPWD, $privateApiKey . ":"); // api key as username, : is important to define password as empty
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERAGENT, "Prestashop/$prestashop_version (littlegiants)");
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         if (defined('_PS_CACHE_CA_CERT_FILE_')) {
             if (method_exists('Tools', 'refreshCACertFile')) {
                 Tools::refreshCACertFile();
