@@ -21,7 +21,7 @@
 		<div class="col-sm-8">
 			<h4>Frisbii Payments Account Information</h4>
 			<table class="table ">
-                {if isset($account->name) && isset($account->email)}
+                {if isset($account->name)}
                     <tbody>
                         <tr>
                             <td>Status</td>
@@ -31,10 +31,12 @@
                             <td>Name</td>
                             <td>{$account->name}</td>
                         </tr>
+                        {if isset($account->email)}
                         <tr>
                             <td>Email</td>
                             <td>{$account->email}</td>
                         </tr>
+                        {/if}
                     </tbody>
                 {else}
                     <tbody>
