@@ -192,10 +192,10 @@ class Reepay extends PaymentModule
                     : $events_to_store;
 
                 $data = array(
-                    'urls' => array_unique($urls),
+                    'urls' => array_values(array_unique($urls)),
                     'disabled' => false,
-                    'alert_emails' => array_unique($alert_emails),
-                    'event_types' => array_unique($event_types)
+                    'alert_emails' => array_values(array_unique($alert_emails)),
+                    'event_types' => array_values(array_unique($event_types))
                 );
 
                 $result = ReepayApi::updateWebhookSettings($data);
