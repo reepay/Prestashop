@@ -31,7 +31,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.3.7';
+        $this->version = '1.3.8';
         $this->author = 'LittleGiants';
         $this->need_instance = 0;
 
@@ -155,40 +155,59 @@ class Reepay extends PaymentModule
          * If values have been submitted in the form, process.
          */
         if (((bool)Tools::isSubmit('submitReepayModule')) == true) {
-            $this->postProcess();
             $privateApiKey = trim((string)(Tools::getValue('REEPAY_PRIVATE_API_KEY')));
-            if (ReepayApi::checkPrivateApiKey($privateApiKey)) {
+            $validationResult = ReepayApi::validatePrivateApiKey($privateApiKey);
+            $isPrivateApiKeyValid = isset($validationResult->valid) && $validationResult->valid === true;
+
+            $this->postProcess(!$isPrivateApiKeyValid);
+
+            if ($isPrivateApiKeyValid) {
                 Configuration::updateValue('REEPAY_PRIVATE_API_KEY', $privateApiKey);
                 $output .= $this->displayConfirmation($this->l('Private API Key Validated!'));
-            } else {
-                $output .= $this->displayError(json_encode("The entered API key is invalid"));
-            }
 
-            // update/set webhooks
-            $result = ReepayApi::getWebhookSettings();
-            $urls[] = $this->context->link->getModuleLink('reepay', 'notification', [], true);
-            $alert_emails = $result->alert_emails;
-            $alert_emails[] = Configuration::get('PS_SHOP_EMAIL');
-            $event_types = $result->event_types;
-            $events_to_store = ['invoice_authorized', 'invoice_settled'];
-            if(is_array($event_types)) {
-                $event_types = array_merge($event_types, $events_to_store);
-            } else {
-                $event_types = $events_to_store;
-            }
-            $data = array(
-                'urls' => array_unique($urls),
-                'disabled' => false,
-                'alert_emails' => array_unique($alert_emails),
-                'event_types' => array_unique($event_types)
-            );
+                // update/set webhooks
+                $webhookUrl = $this->context->link->getModuleLink('reepay', 'notification', [], true);
+                if (!$this->isPublicWebhookUrl($webhookUrl)) {
+                    $output .= $this->displayWarning($this->l('Webhook settings were not updated because the shop URL is not publicly reachable: ') . $webhookUrl);
 
-            $result = ReepayApi::updateWebhookSettings($data);
+                    return $output . $this->renderForm();
+                }
 
-            if (!isset($result->error)) {
-                $output .= $this->displayConfirmation($this->l('Webhook settings has been updated'));
+                $result = ReepayApi::getWebhookSettings();
+                $urls[] = $webhookUrl;
+
+                // Guard: getWebhookSettings() can return null (network error, invalid key,
+                // empty response, or a Reepay error object on non-200). Fall back to safe
+                // defaults so we never dereference null below.
+                if (!is_object($result) || isset($result->error)) {
+                    $result = (object) ['alert_emails' => [], 'event_types' => []];
+                }
+
+                $alert_emails = is_array($result->alert_emails) ? $result->alert_emails : [];
+                $alert_emails[] = Configuration::get('PS_SHOP_EMAIL');
+
+                $events_to_store = ['invoice_authorized', 'invoice_settled'];
+                $event_types = is_array($result->event_types)
+                    ? array_merge($result->event_types, $events_to_store)
+                    : $events_to_store;
+
+                $data = array(
+                    'urls' => array_values(array_unique($urls)),
+                    'disabled' => false,
+                    'alert_emails' => array_values(array_unique($alert_emails)),
+                    'event_types' => array_values(array_unique($event_types))
+                );
+
+                $result = ReepayApi::updateWebhookSettings($data);
+
+                if (!isset($result->error)) {
+                    $output .= $this->displayConfirmation($this->l('Webhook settings has been updated'));
+                } else {
+                    $output .= $this->displayError('Error during updating webhooks: ' . $result->message);
+                }
             } else {
-                $output .= $this->displayError('Error during updating webhooks: ' . $result->message);
+                $message = isset($validationResult->message) ? $validationResult->message : 'The entered API key is invalid';
+                $output .= $this->displayError($this->l($message));
             }
         }
         return $output . $this->renderForm();
@@ -336,13 +355,39 @@ class Reepay extends PaymentModule
     /**
      * Save form data.
      */
-    protected function postProcess()
+    protected function postProcess($skipPrivateApiKey = false)
     {
         $form_values = $this->getConfigFormValues();
 
         foreach (array_keys($form_values) as $key) {
+            if ($skipPrivateApiKey && $key === 'REEPAY_PRIVATE_API_KEY') {
+                continue;
+            }
             Configuration::updateValue($key, Tools::getValue($key));
         }
+    }
+
+    protected function isPublicWebhookUrl($url)
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+
+        if ($host === null || $host === false || $host === '') {
+            return false;
+        }
+
+        if (Tools::strtolower($host) === 'localhost' || substr(Tools::strtolower($host), -10) === '.localhost') {
+            return false;
+        }
+
+        $ip = gethostbyname($host);
+
+        if ($ip === $host && !filter_var($host, FILTER_VALIDATE_IP)) {
+            return true;
+        }
+
+        $flags = FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE;
+
+        return (bool) filter_var($ip, FILTER_VALIDATE_IP, $flags);
     }
 
     /**

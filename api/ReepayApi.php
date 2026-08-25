@@ -16,10 +16,12 @@
 class ReepayApi
 {
 
-    public static function curlSession()
+    public static function curlSession($privateApiKey = null)
     {
 
-        $privateApiKey = Configuration::get('REEPAY_PRIVATE_API_KEY');
+        if ($privateApiKey === null) {
+            $privateApiKey = Configuration::get('REEPAY_PRIVATE_API_KEY');
+        }
         $prestashop_version = _PS_VERSION_;
 
         $ch = curl_init();
@@ -27,23 +29,55 @@ class ReepayApi
         curl_setopt($ch, CURLOPT_USERPWD, $privateApiKey . ":"); // api key as username, : is important to define password as empty
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERAGENT, "Prestashop/$prestashop_version (littlegiants)");
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        if (defined('_PS_CACHE_CA_CERT_FILE_')) {
+            if (method_exists('Tools', 'refreshCACertFile')) {
+                Tools::refreshCACertFile();
+            }
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch, CURLOPT_CAINFO, _PS_CACHE_CA_CERT_FILE_);
+        }
         return $ch;
     }
 
     public static function checkPrivateApiKey($privateApiKey)
     {
-        $prestashop_version = _PS_VERSION_;
-        $ch = curl_init("https://api.reepay.com/v1/account");
-        curl_setopt($ch, CURLOPT_USERAGENT, "Prestashop/$prestashop_version (littlegiants)");
+        $result = ReepayApi::validatePrivateApiKey($privateApiKey);
+
+        return isset($result->valid) && $result->valid === true;
+    }
+
+    public static function validatePrivateApiKey($privateApiKey)
+    {
+        $ch = ReepayApi::curlSession($privateApiKey);
+        curl_setopt($ch, CURLOPT_URL, "https://api.reepay.com/v1/account");
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
-        curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-        curl_setopt($ch, CURLOPT_USERPWD, $privateApiKey . ":"); // api key as username, : is important to define password as empty
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_exec($ch);
+
+        $raw = curl_exec($ch);
+        $error = curl_error($ch);
 
         $responseCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-        return $responseCode == 200;
+        if ($raw === false || $responseCode === 0) {
+            return (object) [
+                'valid' => false,
+                'error' => true,
+                'message' => $error !== '' ? $error : 'Unable to validate the API key',
+            ];
+        }
+
+        if ($responseCode == 200) {
+            return (object) [
+                'valid' => true,
+            ];
+        }
+
+        return (object) [
+            'valid' => false,
+            'error' => true,
+            'message' => 'The entered API key is invalid',
+        ];
     }
 
     public static function getAccount()
@@ -167,7 +201,18 @@ class ReepayApi
         curl_setopt($ch, CURLOPT_URL, 'https://api.reepay.com/v1/account/webhook_settings');
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
 
-        $result = json_decode(curl_exec($ch));
+        $raw    = curl_exec($ch);
+        $error  = curl_error($ch);
+        $result = $raw === false ? null : json_decode($raw);
+
+        if ($result === null && ($error !== '' || $raw === false)) {
+            $result = (object) [
+                'error'   => true,
+                'code'    => 0,
+                'message' => $error !== '' ? $error : 'Empty response from Reepay',
+            ];
+        }
+
         return $result;
     }
 
@@ -190,11 +235,20 @@ class ReepayApi
             )
         );
 
-        $result = curl_exec($ch);
+        $raw     = curl_exec($ch);
+        $error   = curl_error($ch);
+        $result  = $raw === false ? null : json_decode($raw);
 
-        $error = curl_error($ch);
+        if ($result === null && ($error !== '' || $raw === false)) {
+            // Network/cURL-level failure — surface a Reepay-shaped error object so
+            // callers that do `isset($result->error)` keep working.
+            $result = (object) [
+                'error'   => true,
+                'code'    => 0,
+                'message' => $error !== '' ? $error : 'Empty response from Reepay',
+            ];
+        }
 
-        $result = json_decode(curl_exec($ch));
         return $result;
     }
 
