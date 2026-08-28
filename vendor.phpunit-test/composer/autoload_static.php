@@ -42,6 +42,8 @@ class ComposerStaticInitc4eda46043e899c6027276be69b368da
         'AdminOrderContentPresenter' => __DIR__ . '/../..' . '/classes/AdminOrderContentPresenter.php',
         'AdminOrderContentPresenterTest' => __DIR__ . '/../..' . '/tests/AdminOrderContentPresenterTest.php',
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
+        'OrderCreationLock' => __DIR__ . '/../..' . '/classes/OrderCreationLock.php',
+        'OrderCreationLockTest' => __DIR__ . '/../..' . '/tests/OrderCreationLockTest.php',
         'PHPUnit\\Exception' => __DIR__ . '/..' . '/phpunit/phpunit/src/Exception.php',
         'PHPUnit\\Framework\\ActualValueIsNotAnObjectException' => __DIR__ . '/..' . '/phpunit/phpunit/src/Framework/Exception/ActualValueIsNotAnObjectException.php',
         'PHPUnit\\Framework\\Assert' => __DIR__ . '/..' . '/phpunit/phpunit/src/Framework/Assert.php',

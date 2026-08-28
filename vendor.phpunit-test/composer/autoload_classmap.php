@@ -9,6 +9,8 @@ return array(
     'AdminOrderContentPresenter' => $baseDir . '/classes/AdminOrderContentPresenter.php',
     'AdminOrderContentPresenterTest' => $baseDir . '/tests/AdminOrderContentPresenterTest.php',
     'Composer\\InstalledVersions' => $vendorDir . '/composer/InstalledVersions.php',
+    'OrderCreationLock' => $baseDir . '/classes/OrderCreationLock.php',
+    'OrderCreationLockTest' => $baseDir . '/tests/OrderCreationLockTest.php',
     'PHPUnit\\Exception' => $vendorDir . '/phpunit/phpunit/src/Exception.php',
     'PHPUnit\\Framework\\ActualValueIsNotAnObjectException' => $vendorDir . '/phpunit/phpunit/src/Framework/Exception/ActualValueIsNotAnObjectException.php',
     'PHPUnit\\Framework\\Assert' => $vendorDir . '/phpunit/phpunit/src/Framework/Assert.php',
