@@ -15,6 +15,7 @@
  */
 
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 
 class ReepayConfirmationModuleFrontController extends ModuleFrontController
 {
@@ -43,99 +44,112 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
             die("Frisbii Payments not enabled");
         }
         
-        sleep(5); // wait for webhook to process the order
-
         $cart = new Cart(Tools::getValue('invoice'));
 
         $customer = new Customer($cart->id_customer);
 
-        // order hasn't been placed with webhook yet
-        if (!$cart->orderExists()) {
-            $logger->logInfo(sprintf(
-                'Confirmation: order not created by webhook yet for cart id=%d. Fetching charge session for invoice=%s',
-                $cart->id,
-                $invoiceId
-            ));
+        $lock = $this->module->getOrderCreationLock();
+        $lockName = OrderCreationLock::lockNameForCart($this->module->name, $cart->id);
 
-            $session = ReepayApi::getChargeSession($invoiceId);
-
-            if (!Validate::isLoadedObject($customer) || !Validate::isLoadedObject($cart)) {
-                $logger->logError(sprintf(
-                    'Confirmation: cart or customer could not be loaded (cart id=%d, customer id=%d). Redirecting to order step 1',
-                    $cart->id,
-                    $customer->id
-                ));
-                Tools::redirect('index.php?controller=order&step=1');
-            }
-
-            $currency = $this->context->currency;
-            $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
-            if (isset($session->state) && ($session->state == "authorized" || $session->state == "settled")) {
-                $logger->logInfo(sprintf(
-                    'Confirmation: charge session state=%s, validating order for cart id=%d',
-                    $session->state,
-                    $cart->id
-                ));
-
-                try {
-                    $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int)$currency->id, false, $customer->secure_key);
+        $result = $lock->withLock(
+            $lockName,
+            OrderCreationLock::DEFAULT_TIMEOUT_SECONDS,
+            function () use ($cart, $customer, $invoiceId, $logger) {
+                if ($cart->orderExists()) {
                     $logger->logInfo(sprintf(
-                        'Confirmation: order validated. cart id=%d, order id=%s',
-                        $cart->id,
-                        $this->module->currentOrder
+                        'Confirmation: order already exists for cart id=%d (created by webhook). Redirecting to order-confirmation',
+                        $cart->id
                     ));
-                } catch (PrestaShopException $e) {
-                    // Race condition: the Reepay webhook validated the order for this cart
-                    // between our orderExists() check above and validateOrder()'s own internal
-                    // check, which throws instead of returning. Treat it as success if so.
-                    if ($cart->orderExists()) {
-                        $logger->logWarning(sprintf(
-                            'Confirmation: validateOrder() threw because the order was already created concurrently (likely by the webhook) for cart id=%d. Treating as success. Exception message: %s',
+                    return array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
+                }
+
+                // order hasn't been placed with webhook yet
+                $logger->logInfo(sprintf(
+                    'Confirmation: order not created by webhook yet for cart id=%d. Fetching charge session for invoice=%s',
+                    $cart->id,
+                    $invoiceId
+                ));
+
+                $session = ReepayApi::getChargeSession($invoiceId);
+
+                if (!Validate::isLoadedObject($customer) || !Validate::isLoadedObject($cart)) {
+                    $logger->logError(sprintf(
+                        'Confirmation: cart or customer could not be loaded (cart id=%d, customer id=%d). Redirecting to order step 1',
+                        $cart->id,
+                        $customer->id
+                    ));
+                    return array('status' => 'invalid');
+                }
+
+                $currency = $this->context->currency;
+                $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
+                if (isset($session->state) && ($session->state == "authorized" || $session->state == "settled")) {
+                    $logger->logInfo(sprintf(
+                        'Confirmation: charge session state=%s, validating order for cart id=%d',
+                        $session->state,
+                        $cart->id
+                    ));
+
+                    try {
+                        $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int)$currency->id, false, $customer->secure_key);
+                        $logger->logInfo(sprintf(
+                            'Confirmation: order validated. cart id=%d, order id=%s',
                             $cart->id,
-                            $e->getMessage()
+                            $this->module->currentOrder
                         ));
-                    } else {
+                        return array('status' => 'resolved', 'order_id' => $this->module->currentOrder);
+                    } catch (PrestaShopException $e) {
+                        // Defensive only: the primary concurrency mechanism is the lock above.
+                        // This catches PrestaShop's own internal orderExists() check throwing
+                        // instead of returning, for any reason.
+                        if ($cart->orderExists()) {
+                            $logger->logWarning(sprintf(
+                                'Confirmation: validateOrder() threw because the order was already created for cart id=%d. Treating as success. Exception message: %s',
+                                $cart->id,
+                                $e->getMessage()
+                            ));
+                            return array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
+                        }
+
                         $logger->logError(sprintf(
                             'Confirmation: validateOrder() failed for cart id=%d, invoice=%s. Exception message: %s',
                             $cart->id,
                             $invoiceId,
                             $e->getMessage()
                         ));
-                        Tools::redirect('index.php?controller=order&step=1');
+                        return array('status' => 'failed');
                     }
                 }
-            } else {
+
                 $logger->logWarning(sprintf(
                     'Confirmation: charge session missing/unusable state for cart id=%d, invoice=%s. session=%s',
                     $cart->id,
                     $invoiceId,
                     json_encode($session)
                 ));
+                return array('status' => 'resolved', 'order_id' => null);
             }
+        );
 
-            $logger->logInfo(sprintf(
-                'Confirmation: redirecting to order-confirmation. cart id=%d, order id=%s',
-                $cart->id,
-                $this->module->currentOrder
-            ));
-            Tools::redirect('index.php?controller=order-confirmation&id_cart=' .
-                (int)$cart->id . '&id_module=' .
-                (int)$this->module->id . '&id_order=' .
-                $this->module->currentOrder . '&key=' .
-                $customer->secure_key);
-
-        } else {
-            $logger->logInfo(sprintf(
-                'Confirmation: order already exists for cart id=%d (created by webhook). Redirecting to order-confirmation',
-                $cart->id
-            ));
-
-         Tools::redirect('index.php?controller=order-confirmation&id_cart=' .
-             (int)$cart->id . '&id_module=' .
-             (int)$this->module->id . '&id_order=' .
-             $this->module->currentOrder . '&key=' .
-             $customer->secure_key);
-
+        if ($result === OrderCreationLock::TIMEOUT) {
+            $logger->logError(sprintf('Confirmation: could not acquire order-creation lock for cart id=%d within timeout', $cart->id));
+            Tools::redirect('index.php?controller=order&step=1');
+            return;
         }
+
+        if ($result['status'] === 'invalid' || $result['status'] === 'failed') {
+            Tools::redirect('index.php?controller=order&step=1');
+        }
+
+        $logger->logInfo(sprintf(
+            'Confirmation: redirecting to order-confirmation. cart id=%d, order id=%s',
+            $cart->id,
+            $result['order_id']
+        ));
+        Tools::redirect('index.php?controller=order-confirmation&id_cart=' .
+            (int)$cart->id . '&id_module=' .
+            (int)$this->module->id . '&id_order=' .
+            $result['order_id'] . '&key=' .
+            $customer->secure_key);
     }
 }

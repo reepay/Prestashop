@@ -28,6 +28,7 @@ include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSignatureVerifier.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSecretManager.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/AdminOrderContentPresenter.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 
 class Reepay extends PaymentModule
 {
@@ -138,6 +139,42 @@ class Reepay extends PaymentModule
                 Configuration::deleteByName($key);
             }
         );
+    }
+
+    /**
+     * Builds an OrderCreationLock wired to MySQL GET_LOCK()/RELEASE_LOCK() through the
+     * PrestaShop DB connection, so the lock is shared across the webhook and
+     * confirmation requests instead of relying on PHP process memory or the filesystem.
+     */
+    public function getOrderCreationLock()
+    {
+        return new OrderCreationLock(
+            function ($name, $timeoutSeconds) {
+                $result = Db::getInstance()->getValue(
+                    'SELECT GET_LOCK(\'' . pSQL($name) . '\', ' . (int) $timeoutSeconds . ')'
+                );
+
+                return ((int) $result) === 1;
+            },
+            function ($name) {
+                Db::getInstance()->execute(
+                    'SELECT RELEASE_LOCK(\'' . pSQL($name) . '\')'
+                );
+            }
+        );
+    }
+
+    /**
+     * Resolves the PrestaShop order id for a cart, using the PS9+ lookup where
+     * available and the pre-PS9 API otherwise (same version split as payment.php).
+     */
+    public function resolveOrderIdByCartId($cartId)
+    {
+        if (method_exists('Order', 'getIdByCartId')) {
+            return Order::getIdByCartId((int) $cartId);
+        }
+
+        return Order::getOrderByCartId((int) $cartId);
     }
 
     public function _createAjaxController()

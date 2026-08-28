@@ -4,6 +4,7 @@ include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSignatureVerifier.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSecretManager.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 
 class ReepayNotificationModuleFrontController extends ModuleFrontController
 {
@@ -44,8 +45,6 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
         }
 
         // Authenticated from here on. Existing order-creation behavior is unchanged below.
-        sleep(5);
-
         $event_array = ['invoice_authorized', 'invoice_settled'];
 
         $this->context->country->active = 1;
@@ -57,26 +56,42 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                 $customer = new Customer($cart->id_customer);
                 $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
 
-                if ($cart->OrderExists()) {
-                    $logger->logInfo(sprintf('Webhook: order already exists for cart id=%d', $cart->id));
-                    http_response_code(200);
-                    die('Order already has been placed');
+                $lock = $this->module->getOrderCreationLock();
+                $lockName = OrderCreationLock::lockNameForCart($this->module->name, $cart->id);
+
+                $orderCreated = $lock->withLock(
+                    $lockName,
+                    OrderCreationLock::DEFAULT_TIMEOUT_SECONDS,
+                    function () use ($cart, $customer, $total, $logger) {
+                        if ($cart->OrderExists()) {
+                            $logger->logInfo(sprintf('Webhook: order already exists for cart id=%d', $cart->id));
+                            return false;
+                        }
+
+                        $this->module->validateOrder(
+                            $cart->id,
+                            Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
+                            $total,
+                            $this->module->displayName,
+                            null,
+                            null,
+                            $cart->id_currency,
+                            false,
+                            $customer->secure_key
+                        );
+                        $logger->logInfo(sprintf('Webhook: order validated for cart id=%d', $cart->id));
+                        return true;
+                    }
+                );
+
+                if ($orderCreated === OrderCreationLock::TIMEOUT) {
+                    $logger->logError(sprintf('Webhook: could not acquire order-creation lock for cart id=%d within timeout', $cart->id));
+                    http_response_code(503);
+                    die('Lock timeout, please retry');
                 }
 
-                $this->module->validateOrder(
-                    $cart->id,
-                    Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
-                    $total,
-                    $this->module->displayName,
-                    null,
-                    null,
-                    $cart->id_currency,
-                    false,
-                    $customer->secure_key
-                );
-                $logger->logInfo(sprintf('Webhook: order validated for cart id=%d', $cart->id));
                 http_response_code(200);
-                die('Order has been placed with webhook');
+                die($orderCreated ? 'Order has been placed with webhook' : 'Order already has been placed');
             }
         }
 
