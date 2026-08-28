@@ -9,8 +9,8 @@
  *
  * You must not modify, adapt or create derivative works of this source code
  *
- *  @author    LittleGiants
- *  @copyright 2019 LittleGiants
+ *  @author    Frisbii
+ *  @copyright 2026 Frisbii
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
 
  */
@@ -36,7 +36,7 @@ class Reepay extends PaymentModule
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
         $this->version = '1.3.8';
-        $this->author = 'LittleGiants';
+        $this->author = 'Frisbii';
         $this->need_instance = 0;
 
         /**
@@ -47,7 +47,7 @@ class Reepay extends PaymentModule
         parent::__construct();
 
         $this->displayName = $this->l('Frisbii Payments');
-        $this->description = $this->l('Frisbii Payments integration for Prestashop 1.6  / 1.7 / 8 / 9 / developed by LittleGiants');
+        $this->description = $this->l('Frisbii Payments integration for Prestashop 1.6  / 1.7 / 8 / 9 / developed by Frisbii');
 
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall Frisbii Payments? All of the settings will be removed');
 

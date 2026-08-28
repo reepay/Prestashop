@@ -8,8 +8,8 @@
  *
  * You must not modify, adapt or create derivative works of this source code
  *
- *  @author    LittleGiants
- *  @copyright 2019 LittleGiants
+ *  @author    Frisbii
+ *  @copyright 2026 Frisbii
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  */
 
