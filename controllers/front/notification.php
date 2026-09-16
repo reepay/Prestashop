@@ -68,19 +68,40 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                             return false;
                         }
 
-                        $this->module->validateOrder(
-                            $cart->id,
-                            Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
-                            $total,
-                            $this->module->displayName,
-                            null,
-                            null,
-                            $cart->id_currency,
-                            false,
-                            $customer->secure_key
-                        );
-                        $logger->logInfo(sprintf('Webhook: order validated for cart id=%d', $cart->id));
-                        return true;
+                        try {
+                            $this->module->validateOrder(
+                                $cart->id,
+                                Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'),
+                                $total,
+                                $this->module->displayName,
+                                null,
+                                null,
+                                $cart->id_currency,
+                                false,
+                                $customer->secure_key
+                            );
+                            $logger->logInfo(sprintf('Webhook: order validated for cart id=%d', $cart->id));
+                            return true;
+                        } catch (PrestaShopException $e) {
+                            // Defensive only: the primary concurrency mechanism is the lock above.
+                            // This catches PrestaShop's own internal orderExists() check throwing
+                            // instead of returning, for any reason.
+                            if ($cart->OrderExists()) {
+                                $logger->logWarning(sprintf(
+                                    'Webhook: validateOrder() threw because the order was already created for cart id=%d. Treating as success. Exception message: %s',
+                                    $cart->id,
+                                    $e->getMessage()
+                                ));
+                                return false;
+                            }
+
+                            $logger->logError(sprintf(
+                                'Webhook: validateOrder() failed for cart id=%d. Exception message: %s',
+                                $cart->id,
+                                $e->getMessage()
+                            ));
+                            return 'failed';
+                        }
                     }
                 );
 
@@ -88,6 +109,11 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                     $logger->logError(sprintf('Webhook: could not acquire order-creation lock for cart id=%d within timeout', $cart->id));
                     http_response_code(503);
                     die('Lock timeout, please retry');
+                }
+
+                if ($orderCreated === 'failed') {
+                    http_response_code(500);
+                    die('Order validation failed');
                 }
 
                 http_response_code(200);

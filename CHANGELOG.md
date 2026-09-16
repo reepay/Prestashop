@@ -1,5 +1,7 @@
 ## Changelog
 [Unrelease]
+
+v 1.3.8.1
 - [Security] - The webhook endpoint now verifies an HMAC-SHA256 signature from Frisbii before processing any event. Requests that are malformed, unsigned, or signed with an invalid signature are rejected before any cart or order logic runs, closing a gap that previously let a forged webhook request create or modify an order.
 - [Feature] - The webhook signing secret is cached for 10 minutes and refreshed automatically (once) if a signature check fails, so Frisbii rotating the secret no longer requires manual intervention. If the secret cannot be retrieved at all, the webhook fails closed and rejects the event.
 - [Fix] - The cached webhook secret is now invalidated automatically whenever the private API key is changed in the module configuration, since a new key can belong to a different Frisbii account.
