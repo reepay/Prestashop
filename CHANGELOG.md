@@ -1,5 +1,4 @@
 ## Changelog
-[Unrelease]
 
 v 1.3.8.1
 - [Security] - The webhook endpoint now verifies an HMAC-SHA256 signature from Frisbii before processing any event. Requests that are malformed, unsigned, or signed with an invalid signature are rejected before any cart or order logic runs, closing a gap that previously let a forged webhook request create or modify an order.
