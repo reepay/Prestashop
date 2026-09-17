@@ -1,0 +1,21 @@
+{
+    "name": "littlegiants/reepay",
+    "description": "Dev tooling for the Frisbii Payments (reepay) PrestaShop module. Not required at runtime.",
+    "type": "project",
+    "require": {
+        "php": ">=7.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "autoload": {
+        "classmap": [
+            "classes/"
+        ]
+    },
+    "autoload-dev": {
+        "classmap": [
+            "tests/"
+        ]
+    }
+}

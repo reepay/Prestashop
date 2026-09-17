@@ -9,8 +9,8 @@
  *
  * You must not modify, adapt or create derivative works of this source code
  *
- *  @author    LittleGiants
- *  @copyright 2019 LittleGiants
+ *  @author    Frisbii
+ *  @copyright 2026 Frisbii
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
 
  */
@@ -24,6 +24,11 @@ if (!defined('_PS_VERSION_')) {
 
 
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSignatureVerifier.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSecretManager.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/AdminOrderContentPresenter.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 
 class Reepay extends PaymentModule
 {
@@ -31,8 +36,8 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.3.8';
-        $this->author = 'LittleGiants';
+        $this->version = '1.3.8.1';
+        $this->author = 'Frisbii';
         $this->need_instance = 0;
 
         /**
@@ -43,7 +48,7 @@ class Reepay extends PaymentModule
         parent::__construct();
 
         $this->displayName = $this->l('Frisbii Payments');
-        $this->description = $this->l('Frisbii Payments integration for Prestashop 1.6  / 1.7 / 8 / 9 / developed by LittleGiants');
+        $this->description = $this->l('Frisbii Payments integration for Prestashop 1.6  / 1.7 / 8 / 9 / developed by Frisbii');
 
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall Frisbii Payments? All of the settings will be removed');
 
@@ -99,10 +104,77 @@ class Reepay extends PaymentModule
     public function uninstall()
     {
         Configuration::deleteByName('REEPAY_LIVE_MODE');
+        Configuration::deleteByName(WebhookSecretManager::SECRET_KEY);
+        Configuration::deleteByName(WebhookSecretManager::EXPIRES_AT_KEY);
 
         include(dirname(__FILE__) . '/sql/uninstall.php');
 
         return parent::uninstall();
+    }
+
+    /**
+     * Builds a WebhookSecretManager wired to the real Reepay API and Configuration.
+     */
+    public function getWebhookSecretManager()
+    {
+        $fetcher = function () {
+            $result = ReepayApi::getWebhookSettings();
+
+            if (!is_object($result) || isset($result->error) || empty($result->secret)) {
+                return null;
+            }
+
+            return $result->secret;
+        };
+
+        return new WebhookSecretManager(
+            $fetcher,
+            function ($key) {
+                return Configuration::get($key);
+            },
+            function ($key, $value) {
+                Configuration::updateValue($key, $value);
+            },
+            function ($key) {
+                Configuration::deleteByName($key);
+            }
+        );
+    }
+
+    /**
+     * Builds an OrderCreationLock wired to MySQL GET_LOCK()/RELEASE_LOCK() through the
+     * PrestaShop DB connection, so the lock is shared across the webhook and
+     * confirmation requests instead of relying on PHP process memory or the filesystem.
+     */
+    public function getOrderCreationLock()
+    {
+        return new OrderCreationLock(
+            function ($name, $timeoutSeconds) {
+                $result = Db::getInstance()->getValue(
+                    'SELECT GET_LOCK(\'' . pSQL($name) . '\', ' . (int) $timeoutSeconds . ')'
+                );
+
+                return ((int) $result) === 1;
+            },
+            function ($name) {
+                Db::getInstance()->execute(
+                    'SELECT RELEASE_LOCK(\'' . pSQL($name) . '\')'
+                );
+            }
+        );
+    }
+
+    /**
+     * Resolves the PrestaShop order id for a cart, using the PS9+ lookup where
+     * available and the pre-PS9 API otherwise (same version split as payment.php).
+     */
+    public function resolveOrderIdByCartId($cartId)
+    {
+        if (method_exists('Order', 'getIdByCartId')) {
+            return Order::getIdByCartId((int) $cartId);
+        }
+
+        return Order::getOrderByCartId((int) $cartId);
     }
 
     public function _createAjaxController()
@@ -155,6 +227,7 @@ class Reepay extends PaymentModule
          * If values have been submitted in the form, process.
          */
         if (((bool)Tools::isSubmit('submitReepayModule')) == true) {
+            $previousApiKey = Configuration::get('REEPAY_PRIVATE_API_KEY');
             $privateApiKey = trim((string)(Tools::getValue('REEPAY_PRIVATE_API_KEY')));
             $validationResult = ReepayApi::validatePrivateApiKey($privateApiKey);
             $isPrivateApiKeyValid = isset($validationResult->valid) && $validationResult->valid === true;
@@ -163,6 +236,13 @@ class Reepay extends PaymentModule
 
             if ($isPrivateApiKeyValid) {
                 Configuration::updateValue('REEPAY_PRIVATE_API_KEY', $privateApiKey);
+
+                if ($previousApiKey !== $privateApiKey) {
+                    // A different key can belong to a different Reepay account, so the
+                    // cached webhook secret (fetched under the old key) is no longer valid.
+                    $this->getWebhookSecretManager()->invalidate();
+                }
+
                 $output .= $this->displayConfirmation($this->l('Private API Key Validated!'));
 
                 // update/set webhooks
@@ -464,58 +544,25 @@ class Reepay extends PaymentModule
 
         $formActionURL = $this->context->link->getAdminLink('AdminReepay', true, null) . '&action=refundOrder&ajax';
         $account = ReepayApi::getAccount();
-        $dashboardURL = "https://admin.reepay.com/#";
-        $dashboardURL .= "/" . $account->handle . "/" . $account->handle;
-        $dashboardURL .= "/invoice/" . $order->id_cart;
+        $dashboardURL = AdminOrderContentPresenter::dashboardUrl($account->handle, $order->id_cart);
 
-
-        $refundAmountInput = $order->current_state == Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED')
-            ? '<input type="number" step="0.01" max="' . $order->total_paid . '" required class="form-control" name="refundAmount" placeholder="Amount">'
-            : '<input type="number" step="0.01" max="' . $order->total_paid . '" required disabled class="form-control" name="refundAmount" placeholder="Order not settled">';
-
-        $refundButtonDisabled = $order->current_state == Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED')
-            ? ''
-            : 'disabled';
-
-        $debug = null;
-        $events = [];
-        foreach (ReepayApi::getInvoiceEvents($order->id_cart)->content as $key => $event) {
-            $event_name = $event->event_type;
-            switch ($event->event_type) {
-                case 'invoice_created':
-                    $event_name = $this->l('Invoice created');
-                    break;
-                case 'invoice_authorized':
-                    $event_name = $this->l('Invoice authorized');
-                    break;
-                case 'invoice_settled':
-                    $event_name = $this->l('Invoice settled');
-                    break;
-                case 'invoice_refund':
-                    $debug = ReepayApi::getRefund($event->id);
-                    break;
-            }
-
-            array_unshift($events, [
-                "event_name" => $event_name,
-                "event_date" => $event->created
-            ]);
-        }
+        $refundControls = AdminOrderContentPresenter::refundControls(
+            $order->current_state,
+            Configuration::get('REEPAY_ORDER_STATUS_REEPAY_SETTLED'),
+            $order->total_paid
+        );
 
         $invoice = ReepayApi::getInvoice($order->id_cart);
 
         $this->smarty->assign(array(
             'logoSrc' =>  "/modules/" . $this->name . '/views/img/logo.png?' . time(),
-            'refundButtonDisabled' => $refundButtonDisabled,
-            'refundAmountInput' => $refundAmountInput,
-            'dashboardURL' => $dashboardURL,
-            'formActionURL' => $formActionURL,
+            'refundButtonDisabled' => $refundControls['buttonDisabled'],
+            'refundAmountInput' => $refundControls['input'],
             'dashboardURL' => $dashboardURL,
             'formActionURL' => $formActionURL,
             'orderNumber' => $order->id_cart,
             'invoice' => $invoice,
             'cardLogo' => $this->get_logo($invoice->transactions[0]->card_transaction->card_type)
-            // 'debug' => ReepayApi::getInvoice($params['order']->id_cart)->transactions
         ));
 
         $output = "";
@@ -586,69 +633,6 @@ class Reepay extends PaymentModule
 
     public function get_logo($card_type)
     {
-        switch ($card_type) {
-            case 'visa':
-                $image = 'visa.png';
-                break;
-            case 'mc':
-                $image = 'mastercard.png';
-                break;
-            case 'dankort':
-            case 'visa_dk':
-                $image = 'dankort.png';
-                break;
-            case 'ffk':
-                $image = 'forbrugsforeningen.png';
-                break;
-            case 'visa_elec':
-                $image = 'visa-electron.png';
-                break;
-            case 'maestro':
-                $image = 'maestro.png';
-                break;
-            case 'amex':
-                $image = 'american-express.png';
-                break;
-            case 'diners':
-                $image = 'diners.png';
-                break;
-            case 'discover':
-                $image = 'discover.png';
-                break;
-            case 'jcb':
-                $image = 'jcb.png';
-                break;
-            case 'mobilepay':
-                $image = 'mobilepay.png';
-                break;
-            case 'viabill':
-                $image = 'viabill.png';
-                break;
-            case 'klarna_pay_later':
-            case 'klarna_pay_now':
-                $image = 'klarna.png';
-                break;
-            case 'resurs':
-                $image = 'resurs.png';
-                break;
-            case 'china_union_pay':
-                $image = 'cup.png';
-                break;
-            case 'paypal':
-                $image = 'paypal.png';
-                break;
-            case 'applepay':
-                $image = 'applepay.png';
-                break;
-            case 'googlepay':
-                $image = 'googlepay.png';
-                break;
-            case 'vipps':
-                $image = 'vipps.png';
-                break;
-        }
-        if ($image) {
-            return '/modules/' . $this->name . '/views/img/' . $image;
-        }
+        return AdminOrderContentPresenter::cardLogoPath($this->name, $card_type);
     }
 }

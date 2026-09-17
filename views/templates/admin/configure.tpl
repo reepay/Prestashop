@@ -7,8 +7,8 @@
  * 
  * You must not modify, adapt or create derivative works of this source code
  * 
- *  @author    LittleGiants
- *  @copyright 2019 LittleGiants
+ *  @author    Frisbii
+ *  @copyright 2026 Frisbii
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  *}
 
@@ -16,7 +16,7 @@
 	<div class="row">
 		<div class="col-md-4 col-lg-3 text-center">
 			<img width="350px" height="100px"  class="m-3" src="{$module_dir|escape:'html':'UTF-8'}views/img/logo.png?t="{{$time}}>
-			<small class="mt-negative">prestashop integration by littleGiants</small>
+			<small class="mt-negative">prestashop integration by Frisbii</small>
 		</div>
 		<div class="col-sm-8">
 			<h4>Frisbii Payments Account Information</h4>

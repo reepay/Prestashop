@@ -2,9 +2,9 @@
 <module>
 	<name>reepay</name>
 	<displayName><![CDATA[Frisbii Payments]]></displayName>
-	<version><![CDATA[1.3.8]]></version>
-	<description><![CDATA[Frisbii Payments integration for Prestashop 1.6 / 1.7 / 8 / 9 / developed by LittleGiants]]></description>
-	<author><![CDATA[LittleGiants]]></author>
+	<version><![CDATA[1.3.8.1]]></version>
+	<description><![CDATA[Frisbii Payments integration for Prestashop 1.6 / 1.7 / 8 / 9 / developed by Frisbii]]></description>
+	<author><![CDATA[Frisbii]]></author>
 	<tab><![CDATA[payments_gateways]]></tab>
 	<confirmUninstall><![CDATA[Are you sure you want to uninstall Frisbii Payments? All of the settings will be removed]]></confirmUninstall>
 	<is_configurable>1</is_configurable>
