@@ -19,7 +19,7 @@
  */
 class WebhookSignatureVerifier
 {
-    private static $requiredFields = array('timestamp', 'id', 'signature', 'event_type', 'invoice');
+    private static $requiredFields = array('timestamp', 'id', 'signature');
 
     /**
      * @param mixed $data Decoded webhook body.

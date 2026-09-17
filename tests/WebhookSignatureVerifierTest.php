@@ -52,9 +52,19 @@ class WebhookSignatureVerifierTest extends TestCase
             'timestamp' => ['timestamp'],
             'id' => ['id'],
             'signature' => ['signature'],
-            'event_type' => ['event_type'],
-            'invoice' => ['invoice'],
         ];
+    }
+
+    /**
+     * Non-invoice Frisbii events (e.g. customer/plan events) are legitimate and must
+     * be authenticated and acknowledged, not rejected as malformed.
+     */
+    public function testValidatePayloadAcceptsPayloadWithoutInvoiceOrEventType()
+    {
+        $payload = $this->validPayload();
+        unset($payload['invoice'], $payload['event_type']);
+
+        $this->assertTrue(WebhookSignatureVerifier::validatePayload($payload));
     }
 
     public function testValidatePayloadRejectsNonArray()

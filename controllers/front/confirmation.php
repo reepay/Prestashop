@@ -132,9 +132,17 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
         );
 
         if ($result === OrderCreationLock::TIMEOUT) {
-            $logger->logError(sprintf('Confirmation: could not acquire order-creation lock for cart id=%d within timeout', $cart->id));
-            Tools::redirect('index.php?controller=order&step=1');
-            return;
+            if ($cart->orderExists()) {
+                $logger->logWarning(sprintf(
+                    'Confirmation: lock timed out but order already exists for cart id=%d (created by webhook). Redirecting to order-confirmation',
+                    $cart->id
+                ));
+                $result = array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
+            } else {
+                $logger->logError(sprintf('Confirmation: could not acquire order-creation lock for cart id=%d within timeout', $cart->id));
+                Tools::redirect('index.php?controller=order&step=1');
+                return;
+            }
         }
 
         if ($result['status'] === 'invalid' || $result['status'] === 'failed') {

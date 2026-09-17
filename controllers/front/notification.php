@@ -49,7 +49,7 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
 
         $this->context->country->active = 1;
 
-        if (isset($webhook_body['invoice']) && in_array($webhook_body['event_type'], $event_array)) {
+        if (isset($webhook_body['invoice'], $webhook_body['event_type']) && in_array($webhook_body['event_type'], $event_array)) {
             $id_cart = $webhook_body['invoice'];
             if ((int)$id_cart > 0) {
                 $cart = new Cart($id_cart);
