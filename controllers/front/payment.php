@@ -59,7 +59,14 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
 
         $currency = $this->context->currency;
         $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
-        $chargeSession = $this->createChargeSession();
+
+        // Validate the selected method-specific option (tampered/disabled values go back to checkout)
+        $paymentMethod = $this->module->getPaymentMethodMap()->resolveSelection(Tools::getValue(PaymentMethodMap::REQUEST_PARAM));
+        if ($paymentMethod === PaymentMethodMap::INVALID) {
+            Tools::redirect('index.php?controller=order&step=1');
+        }
+
+        $chargeSession = $this->createChargeSession($paymentMethod);
 
         // make the module compatible with Prestashop version >= 9
         if(method_exists('Order', 'getIdByCartId')) {
@@ -105,7 +112,7 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         }
     }
 
-    public function createChargeSession()
+    public function createChargeSession($paymentMethod = null)
     {
         $customer = $this->context->customer;
         $cart = $this->context->cart;
@@ -152,6 +159,8 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
             "accept_url" => $this->context->link->getModuleLink('reepay', 'confirmation', [], true),
             "cancel_url" => $this->context->link->getModuleLink('reepay', 'confirmation', [], true),
         );
+
+        $data = PaymentMethodMap::applyToSessionData($data, $paymentMethod);
 
         $result = ReepayApi::createChargeSession($data);
         return $result;

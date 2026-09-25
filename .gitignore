@@ -1,4 +1,5 @@
 vendor/
 vendor.phpunit-test/
+vendor-test/
 .worktrees/
 .superpowers/
