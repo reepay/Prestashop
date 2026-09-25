@@ -74,6 +74,9 @@ class Reepay extends PaymentModule
 
         // All method-specific options off, generic option on.
         Configuration::updateValue(PaymentMethodMap::SHOW_GENERIC_KEY, true);
+        Configuration::updateValue(PaymentMethodMap::METHODS_KEY, '');
+        Configuration::updateValue(PaymentMethodMap::LOGOS_KEY, '');
+        Configuration::updateValue(PaymentMethodMap::LOGO_HEIGHT_KEY, PaymentMethodMap::DEFAULT_LOGO_HEIGHT);
         foreach (PaymentMethodMap::identifiers() as $methodId) {
             Configuration::updateValue(PaymentMethodMap::enabledKey($methodId), false);
             Configuration::updateValue(PaymentMethodMap::labelKey($methodId), PaymentMethodMap::defaultLabel($methodId));
@@ -336,7 +339,7 @@ class Reepay extends PaymentModule
             'id_language' => $this->context->language->id,
         );
 
-        return $helper->generateForm(array($this->getConfigForm(), $this->getPaymentMethodForm()));
+        return $helper->generateForm(array($this->getConfigForm(), $this->getGeneralPaymentForm(), $this->getPaymentMethodForm()));
     }
 
     /**
@@ -466,6 +469,70 @@ class Reepay extends PaymentModule
     }
 
     /**
+     * "General payment method" section: methods offered in the Frisbii window and logos of the
+     * generic checkout option (mirrors the WooCommerce plugin's Payment Methods / Payment Logos).
+     */
+    protected function getGeneralPaymentForm()
+    {
+        $toOptions = function (array $list) {
+            $options = array();
+            foreach ($list as $id => $name) {
+                $options[] = array('id' => $id, 'name' => $name);
+            }
+            return $options;
+        };
+
+        return array(
+            'form' => array(
+                'legend' => array(
+                    'title' => $this->l('General payment method'),
+                    'icon' => 'icon-picture',
+                ),
+                'input' => array(
+                    array(
+                        'type' => 'select',
+                        'multiple' => true,
+                        'label' => $this->l('Payment Methods'),
+                        'name' => PaymentMethodMap::METHODS_KEY . '[]',
+                        'class' => 'fixed-width-xxl',
+                        'size' => 12,
+                        'desc' => $this->l('Payment methods offered in the Frisbii payment window of the generic option. Leave empty to offer everything enabled in your Frisbii dashboard.'),
+                        'options' => array(
+                            'query' => $toOptions(PaymentMethodMap::genericMethodOptions()),
+                            'id' => 'id',
+                            'name' => 'name',
+                        ),
+                    ),
+                    array(
+                        'type' => 'select',
+                        'multiple' => true,
+                        'label' => $this->l('Payment Logos'),
+                        'name' => PaymentMethodMap::LOGOS_KEY . '[]',
+                        'class' => 'fixed-width-xxl',
+                        'size' => 12,
+                        'desc' => $this->l('Logos shown next to the generic option at checkout. Make sure the methods are enabled in your Frisbii dashboard.'),
+                        'options' => array(
+                            'query' => $toOptions(PaymentMethodMap::logoOptions()),
+                            'id' => 'id',
+                            'name' => 'name',
+                        ),
+                    ),
+                    array(
+                        'type' => 'text',
+                        'label' => $this->l('Logo Height'),
+                        'name' => PaymentMethodMap::LOGO_HEIGHT_KEY,
+                        'class' => 'fixed-width-sm',
+                        'desc' => $this->l('Logo height in pixels (or a CSS length such as 2em).'),
+                    ),
+                ),
+                'submit' => array(
+                    'title' => $this->l('Save'),
+                ),
+            ),
+        );
+    }
+
+    /**
      * Inputs of the "Payment method" section.
      */
     protected function getPaymentMethodFormInputs()
@@ -505,6 +572,11 @@ class Reepay extends PaymentModule
             $methodValues[PaymentMethodMap::labelKey($id)] = $methodMap->label($id);
         }
 
+        $methodValues[PaymentMethodMap::METHODS_KEY . '[]'] = $methodMap->genericMethods();
+        $methodValues[PaymentMethodMap::LOGOS_KEY . '[]'] = $methodMap->selectedLogos();
+        $methodValues[PaymentMethodMap::LOGO_HEIGHT_KEY] = Configuration::get(PaymentMethodMap::LOGO_HEIGHT_KEY) !== false
+            ? Configuration::get(PaymentMethodMap::LOGO_HEIGHT_KEY) : PaymentMethodMap::DEFAULT_LOGO_HEIGHT;
+
         return $methodValues + array(
             'REEPAY_ENABLED' => Configuration::get('REEPAY_ENABLED', false),
             'REEPAY_PRIVATE_API_KEY' => Configuration::get('REEPAY_PRIVATE_API_KEY'),
@@ -524,6 +596,14 @@ class Reepay extends PaymentModule
 
         foreach (array_keys($form_values) as $key) {
             if ($skipPrivateApiKey && $key === 'REEPAY_PRIVATE_API_KEY') {
+                continue;
+            }
+            if ($key === PaymentMethodMap::METHODS_KEY . '[]') {
+                Configuration::updateValue(PaymentMethodMap::METHODS_KEY, PaymentMethodMap::encodeMethods(Tools::getValue(PaymentMethodMap::METHODS_KEY, array())));
+                continue;
+            }
+            if ($key === PaymentMethodMap::LOGOS_KEY . '[]') {
+                Configuration::updateValue(PaymentMethodMap::LOGOS_KEY, PaymentMethodMap::encodeLogos(Tools::getValue(PaymentMethodMap::LOGOS_KEY, array())));
                 continue;
             }
             Configuration::updateValue($key, Tools::getValue($key));
@@ -571,6 +651,11 @@ class Reepay extends PaymentModule
         $this->context->controller->addJS($this->_path . 'views/js/lib/sweetalert2.js');
         $this->context->controller->addJS($this->_path . '/views/js/front.js');
         $this->context->controller->addCSS($this->_path . '/views/css/front.css');
+
+        // Logo Height (sanitised by PaymentMethodMap::logoHeight) also sizes the single-method option logos.
+        $height = $this->getPaymentMethodMap()->logoHeight();
+        return '<style>.payment-option__label img[src*="/modules/' . $this->name . '/views/img/"]'
+            . '{height:' . $height . ';max-height:' . $height . ';width:auto}</style>';
     }
 
     /**
@@ -596,9 +681,8 @@ class Reepay extends PaymentModule
             $option = new PrestaShop\PrestaShop\Core\Payment\PaymentOption();
             $option->setCallToActionText($method['label'])
                 ->setAction($this->context->link->getModuleLink($this->name, 'payment', [PaymentMethodMap::REQUEST_PARAM => $method['id']], true));
-            $logo = _PS_MODULE_DIR_ . $this->name . '/views/img/' . $method['id'] . '.png';
-            if (file_exists($logo)) {
-                $option->setLogo(Media::getMediaPath($logo));
+            if (file_exists(_PS_MODULE_DIR_ . $this->name . '/views/img/' . $method['id'] . '.png')) {
+                $option->setLogo($this->context->link->getMediaLink(_MODULE_DIR_ . $this->name . '/views/img/' . $method['id'] . '.png'));
             }
             $options[] = $option;
         }
@@ -606,12 +690,36 @@ class Reepay extends PaymentModule
         if ($methodMap->showGenericOption()) {
             $embedded = new PrestaShop\PrestaShop\Core\Payment\PaymentOption();
             $embedded->setCallToActionText(Configuration::get('REEPAY_OPTION_TEXT'))
-                ->setAction($this->context->link->getModuleLink($this->name, 'payment', array(), true))
-                ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_ . $this->name . '/payment.jpg'));
+                ->setAction($this->context->link->getModuleLink($this->name, 'payment', array(), true));
+            $logosHtml = $this->renderGenericLogos($methodMap);
+            if ($logosHtml !== '') {
+                $embedded->setAdditionalInformation($logosHtml);
+            }
             $options[] = $embedded;
         }
 
         return $options;
+    }
+
+    /**
+     * HTML of the selected payment logos (height from "Logo Height"), or '' when none is selected
+     * or the logo files are missing. Only allow-listed ids reach the file system and the markup.
+     */
+    protected function renderGenericLogos(PaymentMethodMap $methodMap)
+    {
+        $height = $methodMap->logoHeight();
+        $logoOptions = PaymentMethodMap::logoOptions();
+        $html = '';
+        foreach ($methodMap->selectedLogos() as $logoId) {
+            $file = _PS_MODULE_DIR_ . $this->name . '/views/img/' . $logoId . '.png';
+            if (!file_exists($file)) {
+                continue;
+            }
+            $html .= '<img class="reepay-logo" src="' . Tools::safeOutput($this->context->link->getMediaLink(_MODULE_DIR_ . $this->name . '/views/img/' . $logoId . '.png')) . '"'
+                . ' alt="' . Tools::safeOutput($logoOptions[$logoId]) . '"'
+                . ' style="height:' . Tools::safeOutput($height) . ';max-height:' . Tools::safeOutput($height) . ';margin-right:4px">';
+        }
+        return $html;
     }
 
     public function hookActionOrderStatusUpdate($params)

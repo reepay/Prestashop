@@ -117,6 +117,57 @@ class PaymentMethodMapTest extends TestCase
         $this->assertContains('REEPAY_SHOW_GENERIC_OPTION', $keys);
         $this->assertContains('REEPAY_PM_APPLEPAY_ENABLED', $keys);
         $this->assertContains('REEPAY_PM_KLARNA_LABEL', $keys);
-        $this->assertCount(1 + 2 * count(PaymentMethodMap::identifiers()), array_unique($keys));
+        $this->assertContains('REEPAY_PAYMENT_METHODS', $keys);
+        $this->assertContains('REEPAY_PAYMENT_LOGOS', $keys);
+        $this->assertContains('REEPAY_LOGO_HEIGHT', $keys);
+        $this->assertCount(4 + 2 * count(PaymentMethodMap::identifiers()), array_unique($keys));
+    }
+
+    public function testGenericMethodsAreFilteredAgainstAllowList()
+    {
+        $map = $this->map(array('REEPAY_PAYMENT_METHODS' => 'vipps,evil,card,klarna_pay_later,card'));
+        $this->assertSame(array('card', 'klarna_pay_later', 'vipps'), $map->genericMethods());
+        $this->assertSame(array(), $this->map()->genericMethods());
+    }
+
+    public function testEncodeMethodsDropsUnknownAndNonScalarValues()
+    {
+        $this->assertSame('card,paypal', PaymentMethodMap::encodeMethods(array('paypal', 'x', array('card'), 'card')));
+        $this->assertSame('', PaymentMethodMap::encodeMethods(false));
+        $this->assertSame('', PaymentMethodMap::encodeMethods('nope'));
+    }
+
+    public function testEncodeLogosKeepsOnlyKnownLogos()
+    {
+        $this->assertSame('dankort,visa-electron', PaymentMethodMap::encodeLogos(array('visa-electron', '../etc/passwd', 'dankort')));
+        $this->assertSame(array('visa', 'klarna'), $this->map(array('REEPAY_PAYMENT_LOGOS' => 'klarna,bad,visa'))->selectedLogos());
+    }
+
+    public function testLogoOptionsHaveAnImageFile()
+    {
+        foreach (array_keys(PaymentMethodMap::logoOptions()) as $id) {
+            $this->assertFileExists(__DIR__ . '/../views/img/' . $id . '.png', $id);
+        }
+    }
+
+    public function testLogoHeightIsNormalisedAndSafe()
+    {
+        $this->assertSame('20px', $this->map()->logoHeight());
+        $this->assertSame('30px', $this->map(array('REEPAY_LOGO_HEIGHT' => '30'))->logoHeight());
+        $this->assertSame('2em', $this->map(array('REEPAY_LOGO_HEIGHT' => '2em'))->logoHeight());
+        $this->assertSame('20px', $this->map(array('REEPAY_LOGO_HEIGHT' => '1px;background:red'))->logoHeight());
+    }
+
+    public function testGenericOptionPayloadUsesConfiguredMethods()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array('order' => array()), null, array('card', 'paypal'));
+        $this->assertSame(array('card', 'paypal'), $data['payment_methods']);
+        $this->assertArrayNotHasKey('payment_methods', PaymentMethodMap::applyToSessionData(array(), null, array()));
+    }
+
+    public function testMethodSpecificOptionOverridesGenericMethods()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array(), 'klarna', array('card'));
+        $this->assertSame(array('klarna'), $data['payment_methods']);
     }
 }

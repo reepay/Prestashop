@@ -160,7 +160,7 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
             "cancel_url" => $this->context->link->getModuleLink('reepay', 'confirmation', [], true),
         );
 
-        $data = PaymentMethodMap::applyToSessionData($data, $paymentMethod);
+        $data = PaymentMethodMap::applyToSessionData($data, $paymentMethod, $this->module->getPaymentMethodMap()->genericMethods());
 
         $result = ReepayApi::createChargeSession($data);
         return $result;

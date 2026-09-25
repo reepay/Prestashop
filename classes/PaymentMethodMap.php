@@ -43,6 +43,73 @@ class PaymentMethodMap
         'klarna' => 'Klarna',
     );
 
+    /** Payment methods offered inside the Frisbii window of the generic option (comma-separated ids). */
+    const METHODS_KEY = 'REEPAY_PAYMENT_METHODS';
+
+    /** Logos shown next to the generic option at checkout (comma-separated ids). */
+    const LOGOS_KEY = 'REEPAY_PAYMENT_LOGOS';
+
+    const LOGO_HEIGHT_KEY = 'REEPAY_LOGO_HEIGHT';
+
+    const DEFAULT_LOGO_HEIGHT = '20';
+
+    /**
+     * `payment_methods` values selectable for the generic option (same list as the WooCommerce
+     * plugin's "Payment Methods" setting).
+     */
+    private static $genericMethods = array(
+        'card' => 'All available debit / credit cards',
+        'dankort' => 'Dankort',
+        'visa' => 'VISA',
+        'visa_dk' => 'VISA/Dankort',
+        'visa_elec' => 'VISA Electron',
+        'mc' => 'MasterCard',
+        'amex' => 'American Express',
+        'mobilepay' => 'MobilePay',
+        'viabill' => 'ViaBill',
+        'klarna' => 'Klarna',
+        'klarna_pay_later' => 'Klarna Pay Later',
+        'klarna_pay_now' => 'Klarna Pay Now',
+        'klarna_slice_it' => 'Klarna Slice It',
+        'swish' => 'Swish',
+        'diners' => 'Diners Club',
+        'maestro' => 'Maestro',
+        'laser' => 'Laser',
+        'discover' => 'Discover',
+        'jcb' => 'JCB',
+        'china_union_pay' => 'China Union Pay',
+        'ffk' => 'Forbrugsforeningen',
+        'paypal' => 'PayPal',
+        'applepay' => 'Apple Pay',
+        'googlepay' => 'Google Pay',
+        'vipps' => 'Vipps',
+    );
+
+    /**
+     * Logo id (file name in views/img without extension) => label; same list as the WooCommerce
+     * plugin's "Payment Logos" setting.
+     */
+    private static $logos = array(
+        'dankort' => 'Dankort',
+        'visa' => 'Visa',
+        'mastercard' => 'MasterCard',
+        'visa-electron' => 'Visa Electron',
+        'maestro' => 'Maestro',
+        'paypal' => 'PayPal',
+        'mobilepay' => 'MobilePay Online',
+        'applepay' => 'ApplePay',
+        'klarna' => 'Klarna',
+        'viabill' => 'Viabill',
+        'forbrugsforeningen' => 'Forbrugsforeningen',
+        'amex' => 'AMEX',
+        'jcb' => 'JCB',
+        'diners' => 'Diners Club',
+        'unionpay' => 'Unionpay',
+        'discover' => 'Discover',
+        'googlepay' => 'Google pay',
+        'vipps' => 'Vipps',
+    );
+
     /** @var callable function(string $key): mixed */
     private $getConfig;
 
@@ -84,7 +151,7 @@ class PaymentMethodMap
      */
     public static function configKeys()
     {
-        $keys = array(self::SHOW_GENERIC_KEY);
+        $keys = array(self::SHOW_GENERIC_KEY, self::METHODS_KEY, self::LOGOS_KEY, self::LOGO_HEIGHT_KEY);
         foreach (self::identifiers() as $id) {
             $keys[] = self::enabledKey($id);
             $keys[] = self::labelKey($id);
@@ -149,16 +216,104 @@ class PaymentMethodMap
     }
 
     /**
-     * Adds payment_methods to a charge-session payload only when a method is selected.
+     * @return string[] id => label of the methods selectable for the generic option.
+     */
+    public static function genericMethodOptions()
+    {
+        return self::$genericMethods;
+    }
+
+    /**
+     * @return string[] id => label of the logos selectable for the generic option.
+     */
+    public static function logoOptions()
+    {
+        return self::$logos;
+    }
+
+    /**
+     * Turns a raw list (array from a form, or the stored comma-separated string) into the
+     * ids that exist in $allowed, without duplicates, in the order of $allowed.
+     *
+     * @param mixed $raw
+     * @param string[] $allowed id => label
+     * @return string[]
+     */
+    private static function filterList($raw, array $allowed)
+    {
+        if (is_string($raw)) {
+            $raw = explode(',', $raw);
+        }
+        if (!is_array($raw)) {
+            return array();
+        }
+        return array_values(array_intersect(array_keys($allowed), array_map('strval', array_filter($raw, 'is_scalar'))));
+    }
+
+    /**
+     * @param mixed $raw Posted array or stored string.
+     * @return string Comma-separated allow-listed method ids, ready for Configuration.
+     */
+    public static function encodeMethods($raw)
+    {
+        return implode(',', self::filterList($raw, self::$genericMethods));
+    }
+
+    /**
+     * @param mixed $raw Posted array or stored string.
+     * @return string Comma-separated allow-listed logo ids, ready for Configuration.
+     */
+    public static function encodeLogos($raw)
+    {
+        return implode(',', self::filterList($raw, self::$logos));
+    }
+
+    /**
+     * @return string[] Methods the generic option restricts the Frisbii window to (empty = no restriction).
+     */
+    public function genericMethods()
+    {
+        return self::filterList($this->config(self::METHODS_KEY), self::$genericMethods);
+    }
+
+    /**
+     * @return string[] Logo ids to show next to the generic option.
+     */
+    public function selectedLogos()
+    {
+        return self::filterList($this->config(self::LOGOS_KEY), self::$logos);
+    }
+
+    /**
+     * @return string A safe CSS length: a number (px is assumed) or a number with px/em/rem/%;
+     *                anything else falls back to the default.
+     */
+    public function logoHeight()
+    {
+        $height = trim((string) $this->config(self::LOGO_HEIGHT_KEY));
+        if (!preg_match('/^\d+(\.\d+)?(px|em|rem|%)?$/', $height)) {
+            $height = self::DEFAULT_LOGO_HEIGHT;
+        }
+        return ctype_digit(substr($height, -1)) ? $height . 'px' : $height;
+    }
+
+    /**
+     * Adds payment_methods to a charge-session payload: the selected method-specific option,
+     * or, for the generic option, the methods configured in "Payment Methods" (if any).
      *
      * @param array $data Charge-session payload.
      * @param string|null $method Validated method id, or null for the generic option.
+     * @param string[] $genericMethods Methods configured for the generic option.
      * @return array
      */
-    public static function applyToSessionData(array $data, $method)
+    public static function applyToSessionData(array $data, $method, array $genericMethods = array())
     {
-        if ($method !== null && self::isAllowed($method)) {
-            $data['payment_methods'] = array($method);
+        if ($method !== null) {
+            if (self::isAllowed($method)) {
+                $data['payment_methods'] = array($method);
+            }
+        } elseif ($genericMethods) {
+            $data['payment_methods'] = array_values($genericMethods);
         }
         return $data;
     }
