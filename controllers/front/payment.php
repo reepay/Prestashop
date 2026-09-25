@@ -15,6 +15,7 @@
  */
 
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/ChargeSessionLog.php';
 
 class ReepayPaymentModuleFrontController extends ModuleFrontController
 {
@@ -163,6 +164,18 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         $data = PaymentMethodMap::applyToSessionData($data, $paymentMethod, $this->module->getPaymentMethodMap()->genericMethods());
 
         $result = ReepayApi::createChargeSession($data);
+
+        if (Configuration::get(ChargeSessionLog::ENABLED_KEY)) {
+            PrestaShopLogger::addLog(
+                ChargeSessionLog::message($data, $result, Configuration::get('REEPAY_CHECKOUT_TYPE')),
+                1,
+                null,
+                'Cart',
+                (int) $cart->id,
+                true
+            );
+        }
+
         return $result;
     }
 }

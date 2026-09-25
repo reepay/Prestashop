@@ -30,6 +30,7 @@ include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/AdminOrderContentPresenter.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/PaymentMethodMap.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/ChargeSessionLog.php';
 
 class Reepay extends PaymentModule
 {
@@ -74,6 +75,7 @@ class Reepay extends PaymentModule
 
         // All method-specific options off, generic option on.
         Configuration::updateValue(PaymentMethodMap::SHOW_GENERIC_KEY, true);
+        Configuration::updateValue(ChargeSessionLog::ENABLED_KEY, false);
         Configuration::updateValue(PaymentMethodMap::METHODS_KEY, '');
         Configuration::updateValue(PaymentMethodMap::LOGOS_KEY, '');
         Configuration::updateValue(PaymentMethodMap::LOGO_HEIGHT_KEY, PaymentMethodMap::DEFAULT_LOGO_HEIGHT);
@@ -120,6 +122,7 @@ class Reepay extends PaymentModule
         foreach (PaymentMethodMap::configKeys() as $key) {
             Configuration::deleteByName($key);
         }
+        Configuration::deleteByName(ChargeSessionLog::ENABLED_KEY);
 
         include(dirname(__FILE__) . '/sql/uninstall.php');
 
@@ -420,6 +423,17 @@ class Reepay extends PaymentModule
                         ),
                     ),
                     array(
+                        'type' => 'switch',
+                        'label' => $this->l('Debug logging'),
+                        'name' => ChargeSessionLog::ENABLED_KEY,
+                        'is_bool' => true,
+                        'desc' => $this->l('Log each charge session request (payment methods sent to Frisbii, result) in Advanced Parameters > Logs. No customer data is logged.'),
+                        'values' => array(
+                            array('id' => 'debug_on', 'value' => true, 'label' => $this->l('Enabled')),
+                            array('id' => 'debug_off', 'value' => false, 'label' => $this->l('Disabled')),
+                        ),
+                    ),
+                    array(
                         'type' => 'select',
                         'label' => $this->l('Status: Frisbii Payments Authorized'),
                         'name' => 'REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED',
@@ -485,8 +499,8 @@ class Reepay extends PaymentModule
         return array(
             'form' => array(
                 'legend' => array(
-                    'title' => $this->l('General payment method'),
-                    'icon' => 'icon-picture',
+                    'title' => $this->l('Frisbii Pay General payment method'),
+                    'icon' => 'icon-credit-card',
                 ),
                 'input' => array(
                     array(
@@ -576,6 +590,8 @@ class Reepay extends PaymentModule
         $methodValues[PaymentMethodMap::LOGOS_KEY . '[]'] = $methodMap->selectedLogos();
         $methodValues[PaymentMethodMap::LOGO_HEIGHT_KEY] = Configuration::get(PaymentMethodMap::LOGO_HEIGHT_KEY) !== false
             ? Configuration::get(PaymentMethodMap::LOGO_HEIGHT_KEY) : PaymentMethodMap::DEFAULT_LOGO_HEIGHT;
+
+        $methodValues[ChargeSessionLog::ENABLED_KEY] = (int) Configuration::get(ChargeSessionLog::ENABLED_KEY);
 
         return $methodValues + array(
             'REEPAY_ENABLED' => Configuration::get('REEPAY_ENABLED', false),
