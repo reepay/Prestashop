@@ -53,6 +53,11 @@ class PaymentMethodMap
 
     const DEFAULT_LOGO_HEIGHT = '20';
 
+    /** Trigger values of "Payment Methods" that make Click to Pay available (FP-14). */
+    const CLICK_TO_PAY_TRIGGERS = array('card', 'visa', 'mc');
+
+    const CLICK_TO_PAY = 'click_to_pay';
+
     /**
      * `payment_methods` values selectable for the generic option (same list as the WooCommerce
      * plugin's "Payment Methods" setting).
@@ -108,6 +113,7 @@ class PaymentMethodMap
         'discover' => 'Discover',
         'googlepay' => 'Google pay',
         'vipps' => 'Vipps',
+        'click_to_pay' => 'Click to Pay',
     );
 
     /** @var callable function(string $key): mixed */
@@ -304,9 +310,11 @@ class PaymentMethodMap
      * @param array $data Charge-session payload.
      * @param string|null $method Validated method id, or null for the generic option.
      * @param string[] $genericMethods Methods configured for the generic option.
+     * @param bool $hasSubscriptionProduct Whether the cart contains a subscription product
+     *                                     (FP-14: Click to Pay is excluded for subscriptions).
      * @return array
      */
-    public static function applyToSessionData(array $data, $method, array $genericMethods = array())
+    public static function applyToSessionData(array $data, $method, array $genericMethods = array(), $hasSubscriptionProduct = false)
     {
         if ($method !== null) {
             if (self::isAllowed($method)) {
@@ -315,7 +323,26 @@ class PaymentMethodMap
         } elseif ($genericMethods) {
             $data['payment_methods'] = array_values($genericMethods);
         }
+
+        if (!$hasSubscriptionProduct && !empty($data['payment_methods']) && self::needsClickToPay($data['payment_methods'])) {
+            $data['payment_methods'][] = self::CLICK_TO_PAY;
+        }
+
         return $data;
+    }
+
+    /**
+     * Click to Pay (FP-14) is not a standalone payment method: Frisbii enables it in the
+     * payment window when `payment_methods` already contains card, visa or mc, and it must
+     * never be sent on its own.
+     *
+     * @param string[] $paymentMethods
+     * @return bool
+     */
+    private static function needsClickToPay(array $paymentMethods)
+    {
+        return !in_array(self::CLICK_TO_PAY, $paymentMethods, true)
+            && count(array_intersect(self::CLICK_TO_PAY_TRIGGERS, $paymentMethods)) > 0;
     }
 
     private function config($key)

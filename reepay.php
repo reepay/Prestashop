@@ -170,6 +170,26 @@ class Reepay extends PaymentModule
         });
     }
 
+    /**
+     * FP-14: Click to Pay is excluded for subscriptions. This module has no subscription
+     * concept of its own; a cart is a subscription when the (optional) billwerksubscription
+     * module is installed and reports a subscription product in it. Defensive: returns false
+     * when that module is absent, disabled, or does not expose the expected method.
+     */
+    public function cartHasSubscriptionProducts(Cart $cart)
+    {
+        if (!Module::isEnabled('billwerksubscription')) {
+            return false;
+        }
+
+        $billwerkSubscription = Module::getInstanceByName('billwerksubscription');
+        if (!$billwerkSubscription || !method_exists($billwerkSubscription, 'cartHasSubscriptionProducts')) {
+            return false;
+        }
+
+        return (bool) $billwerkSubscription->cartHasSubscriptionProducts($cart);
+    }
+
     public function getOrderCreationLock()
     {
         return new OrderCreationLock(
@@ -704,10 +724,14 @@ class Reepay extends PaymentModule
         }
 
         if ($methodMap->showGenericOption()) {
+            $hasSubscriptionProduct = isset($params['cart']) && $params['cart'] instanceof Cart
+                ? $this->cartHasSubscriptionProducts($params['cart'])
+                : false;
+
             $embedded = new PrestaShop\PrestaShop\Core\Payment\PaymentOption();
             $embedded->setCallToActionText(Configuration::get('REEPAY_OPTION_TEXT'))
                 ->setAction($this->context->link->getModuleLink($this->name, 'payment', array(), true));
-            $logosHtml = $this->renderGenericLogos($methodMap);
+            $logosHtml = $this->renderGenericLogos($methodMap, $hasSubscriptionProduct);
             if ($logosHtml !== '') {
                 $embedded->setAdditionalInformation($logosHtml);
             }
@@ -720,13 +744,19 @@ class Reepay extends PaymentModule
     /**
      * HTML of the selected payment logos (height from "Logo Height"), or '' when none is selected
      * or the logo files are missing. Only allow-listed ids reach the file system and the markup.
+     *
+     * @param bool $hasSubscriptionProduct FP-14: the Click to Pay logo is never shown for a
+     *                                     subscription cart, even when selected in "Payment Logos".
      */
-    protected function renderGenericLogos(PaymentMethodMap $methodMap)
+    protected function renderGenericLogos(PaymentMethodMap $methodMap, $hasSubscriptionProduct = false)
     {
         $height = $methodMap->logoHeight();
         $logoOptions = PaymentMethodMap::logoOptions();
         $html = '';
         foreach ($methodMap->selectedLogos() as $logoId) {
+            if ($hasSubscriptionProduct && $logoId === PaymentMethodMap::CLICK_TO_PAY) {
+                continue;
+            }
             $file = _PS_MODULE_DIR_ . $this->name . '/views/img/' . $logoId . '.png';
             if (!file_exists($file)) {
                 continue;

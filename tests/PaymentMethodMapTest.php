@@ -160,14 +160,98 @@ class PaymentMethodMapTest extends TestCase
 
     public function testGenericOptionPayloadUsesConfiguredMethods()
     {
-        $data = PaymentMethodMap::applyToSessionData(array('order' => array()), null, array('card', 'paypal'));
-        $this->assertSame(array('card', 'paypal'), $data['payment_methods']);
+        $data = PaymentMethodMap::applyToSessionData(array('order' => array()), null, array('mobilepay', 'paypal'));
+        $this->assertSame(array('mobilepay', 'paypal'), $data['payment_methods']);
         $this->assertArrayNotHasKey('payment_methods', PaymentMethodMap::applyToSessionData(array(), null, array()));
     }
 
     public function testMethodSpecificOptionOverridesGenericMethods()
     {
-        $data = PaymentMethodMap::applyToSessionData(array(), 'klarna', array('card'));
+        $data = PaymentMethodMap::applyToSessionData(array(), 'klarna', array('mobilepay'));
         $this->assertSame(array('klarna'), $data['payment_methods']);
+    }
+
+    /**
+     * FP-14: click_to_pay is appended whenever payment_methods contains card, visa or mc,
+     * exactly once, and only for the generic option.
+     */
+    public function testClickToPayIsAddedForEachCardTrigger()
+    {
+        foreach (array('card', 'visa', 'mc') as $trigger) {
+            $data = PaymentMethodMap::applyToSessionData(array(), null, array($trigger));
+            $this->assertSame(array($trigger, 'click_to_pay'), $data['payment_methods'], $trigger);
+        }
+    }
+
+    public function testClickToPayAppearsOnceWithMultipleTriggers()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array(), null, array('visa', 'mc', 'card'));
+        $this->assertSame(array('visa', 'mc', 'card', 'click_to_pay'), $data['payment_methods']);
+    }
+
+    public function testClickToPayNotDuplicatedWhenAlreadyConfigured()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array(), null, array('card', 'click_to_pay'));
+        $this->assertSame(array('card', 'click_to_pay'), $data['payment_methods']);
+    }
+
+    public function testClickToPayNotAddedWithoutACardTrigger()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array(), null, array('dankort', 'mobilepay'));
+        $this->assertSame(array('dankort', 'mobilepay'), $data['payment_methods']);
+    }
+
+    public function testClickToPayNotAddedForMethodSpecificOptions()
+    {
+        foreach (array('applepay', 'klarna') as $id) {
+            $data = PaymentMethodMap::applyToSessionData(array(), $id, array('card'));
+            $this->assertSame(array($id), $data['payment_methods'], $id);
+        }
+    }
+
+    public function testClickToPayNeverSentAlone()
+    {
+        $this->assertArrayNotHasKey('payment_methods', PaymentMethodMap::applyToSessionData(array(), null, array()));
+    }
+
+    public function testEncodeLogosAcceptsClickToPay()
+    {
+        $this->assertSame('dankort,click_to_pay', PaymentMethodMap::encodeLogos(array('click_to_pay', 'dankort')));
+    }
+
+    /**
+     * FP-14 AC4: Click to Pay must never be sent for a subscription cart, even with a
+     * triggering method configured.
+     */
+    public function testClickToPayExcludedForSubscriptionCart()
+    {
+        foreach (array('card', 'visa', 'mc') as $trigger) {
+            $data = PaymentMethodMap::applyToSessionData(array(), null, array($trigger), true);
+            $this->assertSame(array($trigger), $data['payment_methods'], $trigger);
+        }
+    }
+
+    public function testClickToPayExcludedForSubscriptionCartWithMultipleTriggers()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array(), null, array('visa', 'mc', 'card'), true);
+        $this->assertSame(array('visa', 'mc', 'card'), $data['payment_methods']);
+    }
+
+    public function testSubscriptionFlagDoesNotAffectNonTriggeringMethods()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array(), null, array('dankort', 'mobilepay'), true);
+        $this->assertSame(array('dankort', 'mobilepay'), $data['payment_methods']);
+    }
+
+    public function testSubscriptionFlagDoesNotAffectMethodSpecificOptions()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array(), 'klarna', array('card'), true);
+        $this->assertSame(array('klarna'), $data['payment_methods']);
+    }
+
+    public function testSubscriptionFlagDefaultsToFalse()
+    {
+        $data = PaymentMethodMap::applyToSessionData(array(), null, array('card'));
+        $this->assertSame(array('card', 'click_to_pay'), $data['payment_methods']);
     }
 }
