@@ -16,6 +16,7 @@
 
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/ReepayChargeVerifier.php';
 
 class ReepayConfirmationModuleFrontController extends ModuleFrontController
 {
@@ -44,7 +45,15 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
             die("Frisbii Payments not enabled");
         }
         
-        $cart = new Cart(Tools::getValue('invoice'));
+        // Only a plain positive integer may be used as cart id / Reepay charge handle.
+        if (!is_string($invoiceId) || !ctype_digit($invoiceId) || (int) $invoiceId <= 0) {
+            $logger->logError(sprintf('Confirmation: rejected invalid invoice value "%s". Redirecting to order step 1', is_string($invoiceId) ? $invoiceId : gettype($invoiceId)));
+            Tools::redirect('index.php?controller=order&step=1');
+            return;
+        }
+        $invoiceId = (int) $invoiceId;
+
+        $cart = new Cart($invoiceId);
 
         $customer = new Customer($cart->id_customer);
 
@@ -70,8 +79,6 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
                     $invoiceId
                 ));
 
-                $session = ReepayApi::getChargeSession($invoiceId);
-
                 if (!Validate::isLoadedObject($customer) || !Validate::isLoadedObject($cart)) {
                     $logger->logError(sprintf(
                         'Confirmation: cart or customer could not be loaded (cart id=%d, customer id=%d). Redirecting to order step 1',
@@ -81,53 +88,55 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
                     return array('status' => 'invalid');
                 }
 
-                $currency = $this->context->currency;
-                $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
-                if (isset($session->state) && ($session->state == "authorized" || $session->state == "settled")) {
-                    $logger->logInfo(sprintf(
-                        'Confirmation: charge session state=%s, validating order for cart id=%d',
-                        $session->state,
-                        $cart->id
+                $verification = ReepayChargeVerifier::verify($cart, $invoiceId);
+                if ($verification['status'] !== ReepayChargeVerifier::STATUS_OK) {
+                    $logger->logError(sprintf(
+                        'Confirmation: charge verification failed (%s) for cart id=%d, invoice=%s: %s. Order not created',
+                        $verification['status'],
+                        $cart->id,
+                        $invoiceId,
+                        $verification['reason']
                     ));
-
-                    try {
-                        $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int)$currency->id, false, $customer->secure_key);
-                        $logger->logInfo(sprintf(
-                            'Confirmation: order validated. cart id=%d, order id=%s',
-                            $cart->id,
-                            $this->module->currentOrder
-                        ));
-                        return array('status' => 'resolved', 'order_id' => $this->module->currentOrder);
-                    } catch (PrestaShopException $e) {
-                        // Defensive only: the primary concurrency mechanism is the lock above.
-                        // This catches PrestaShop's own internal orderExists() check throwing
-                        // instead of returning, for any reason.
-                        if ($cart->orderExists()) {
-                            $logger->logWarning(sprintf(
-                                'Confirmation: validateOrder() threw because the order was already created for cart id=%d. Treating as success. Exception message: %s',
-                                $cart->id,
-                                $e->getMessage()
-                            ));
-                            return array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
-                        }
-
-                        $logger->logError(sprintf(
-                            'Confirmation: validateOrder() failed for cart id=%d, invoice=%s. Exception message: %s',
-                            $cart->id,
-                            $invoiceId,
-                            $e->getMessage()
-                        ));
-                        return array('status' => 'failed');
-                    }
+                    return array('status' => 'invalid');
                 }
 
-                $logger->logWarning(sprintf(
-                    'Confirmation: charge session missing/unusable state for cart id=%d, invoice=%s. session=%s',
-                    $cart->id,
-                    $invoiceId,
-                    json_encode($session)
+                $currency = $this->context->currency;
+                $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
+                $logger->logInfo(sprintf(
+                    'Confirmation: charge verified (state=%s), validating order for cart id=%d',
+                    $verification['charge']->state,
+                    $cart->id
                 ));
-                return array('status' => 'resolved', 'order_id' => null);
+
+                try {
+                    $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int)$currency->id, false, $customer->secure_key);
+                    $logger->logInfo(sprintf(
+                        'Confirmation: order validated. cart id=%d, order id=%s',
+                        $cart->id,
+                        $this->module->currentOrder
+                    ));
+                    return array('status' => 'resolved', 'order_id' => $this->module->currentOrder);
+                } catch (PrestaShopException $e) {
+                    // Defensive only: the primary concurrency mechanism is the lock above.
+                    // This catches PrestaShop's own internal orderExists() check throwing
+                    // instead of returning, for any reason.
+                    if ($cart->orderExists()) {
+                        $logger->logWarning(sprintf(
+                            'Confirmation: validateOrder() threw because the order was already created for cart id=%d. Treating as success. Exception message: %s',
+                            $cart->id,
+                            $e->getMessage()
+                        ));
+                        return array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
+                    }
+
+                    $logger->logError(sprintf(
+                        'Confirmation: validateOrder() failed for cart id=%d, invoice=%s. Exception message: %s',
+                        $cart->id,
+                        $invoiceId,
+                        $e->getMessage()
+                    ));
+                    return array('status' => 'failed');
+                }
             }
         );
 

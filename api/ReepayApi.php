@@ -167,7 +167,7 @@ class ReepayApi
     public static function getChargeSession($orderId)
     {
         $ch = ReepayApi::curlSession();
-        curl_setopt($ch, CURLOPT_URL, "https://api.reepay.com/v1/charge/" . $orderId);
+        curl_setopt($ch, CURLOPT_URL, "https://api.reepay.com/v1/charge/" . rawurlencode((string) $orderId));
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
 
         $result = json_decode(curl_exec($ch));

@@ -16,6 +16,7 @@
 
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/ChargeSessionLog.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/ReepayChargeVerifier.php';
 
 class ReepayPaymentModuleFrontController extends ModuleFrontController
 {
@@ -77,7 +78,19 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         }
 
         if (isset($chargeSession->code) && $chargeSession->code == 105) {
-            //Order already paid
+            //Order already paid: only trust it if the charge really belongs to this cart and covers its total
+            $verification = ReepayChargeVerifier::verify($cart, $cart->id);
+            if ($verification['status'] !== ReepayChargeVerifier::STATUS_OK) {
+                PrestaShopLogger::addLog(
+                    sprintf('Reepay payment: code 105 charge verification failed for cart id=%d (%s): %s', (int) $cart->id, $verification['status'], $verification['reason']),
+                    3,
+                    null,
+                    'Cart',
+                    (int) $cart->id,
+                    true
+                );
+                Tools::redirect('index.php?controller=order&step=1');
+            }
             $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int) $currency->id, false, $customer->secure_key);
             $confirmationURL = $this->context->link->getPageLink('order-confirmation');
             Tools::redirect($confirmationURL . '?id_cart=' . $cart->id . '&id_module=' . $this->module->id . '&id_order=' . $order_id . '&key=' . $customer->secure_key);
@@ -127,7 +140,7 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         $data = array(
             "order" => [
                 "handle" => $cart->id,
-                "amount" => (float) $cart->getOrderTotal(true, Cart::BOTH) * 100,
+                "amount" => (int) round($cart->getOrderTotal(true, Cart::BOTH) * 100),
                 "currency" => $this->context->currency->iso_code,
                 "customer" => [
                     "email" => $customer->email,

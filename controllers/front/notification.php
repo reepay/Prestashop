@@ -5,6 +5,7 @@ include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSignatureVerifier.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSecretManager.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/ReepayChargeVerifier.php';
 
 class ReepayNotificationModuleFrontController extends ModuleFrontController
 {
@@ -51,9 +52,16 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
 
         if (isset($webhook_body['invoice'], $webhook_body['event_type']) && in_array($webhook_body['event_type'], $event_array)) {
             $id_cart = $webhook_body['invoice'];
-            if ((int)$id_cart > 0) {
-                $cart = new Cart($id_cart);
+            if (is_scalar($id_cart) && ctype_digit((string) $id_cart) && (int) $id_cart > 0) {
+                $cart = new Cart((int) $id_cart);
+                if (!Validate::isLoadedObject($cart)) {
+                    $logger->logError(sprintf('Webhook: cart could not be loaded for invoice=%s. Not retrying', $id_cart));
+                    http_response_code(200);
+                    die('Cart not found');
+                }
                 $customer = new Customer($cart->id_customer);
+                // In a webhook request the context currency is the shop default, not the cart's.
+                $this->context->currency = new Currency((int) $cart->id_currency);
                 $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
 
                 $lock = $this->module->getOrderCreationLock();
@@ -62,10 +70,22 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                 $orderCreated = $lock->withLock(
                     $lockName,
                     OrderCreationLock::DEFAULT_TIMEOUT_SECONDS,
-                    function () use ($cart, $customer, $total, $logger) {
+                    function () use ($cart, $customer, $total, $logger, $id_cart) {
                         if ($cart->OrderExists()) {
                             $logger->logInfo(sprintf('Webhook: order already exists for cart id=%d', $cart->id));
                             return false;
+                        }
+
+                        $verification = ReepayChargeVerifier::verify($cart, $id_cart);
+                        if ($verification['status'] !== ReepayChargeVerifier::STATUS_OK) {
+                            $logger->logError(sprintf(
+                                'Webhook: charge verification failed (%s) for cart id=%d, invoice=%s: %s. Order not created',
+                                $verification['status'],
+                                $cart->id,
+                                $id_cart,
+                                $verification['reason']
+                            ));
+                            return $verification['status'] === ReepayChargeVerifier::STATUS_ERROR ? 'transient' : 'rejected';
                         }
 
                         try {
@@ -109,6 +129,17 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                     $logger->logError(sprintf('Webhook: could not acquire order-creation lock for cart id=%d within timeout', $cart->id));
                     http_response_code(503);
                     die('Lock timeout, please retry');
+                }
+
+                if ($orderCreated === 'transient') {
+                    http_response_code(503);
+                    die('Charge verification failed, please retry');
+                }
+
+                if ($orderCreated === 'rejected') {
+                    // Permanent mismatch: 2xx so Reepay does not retry; reason is in the log.
+                    http_response_code(200);
+                    die('Charge does not match cart, order not created');
                 }
 
                 if ($orderCreated === 'failed') {
