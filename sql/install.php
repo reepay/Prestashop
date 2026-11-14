@@ -20,6 +20,13 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'reepay` (
     PRIMARY KEY  (`id_reepay`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;';
 
+$sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'reepay_webhook_event` (
+    `id_event` varchar(64) NOT NULL,
+    `created` int(10) unsigned NOT NULL,
+    PRIMARY KEY (`id_event`),
+    KEY `created` (`created`)
+) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;';
+
 foreach ($sql as $query) {
     if (Db::getInstance()->execute($query) == false) {
         return false;

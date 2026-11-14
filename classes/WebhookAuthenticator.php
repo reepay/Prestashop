@@ -24,13 +24,57 @@ class WebhookAuthenticator
     const RESULT_OK = 'ok';
     const RESULT_MALFORMED = 'malformed';
     const RESULT_UNAUTHORIZED = 'unauthorized';
+    /** Correctly signed, but the timestamp is outside the freshness window (captured/replayed triple). */
+    const RESULT_STALE = 'stale';
+
+    const DEFAULT_TOLERANCE_SECONDS = 900;
 
     /** @var WebhookSecretManager */
     private $secretManager;
 
-    public function __construct(WebhookSecretManager $secretManager)
+    /** @var int Max allowed difference (seconds, both directions) between the webhook timestamp and now. 0 disables. */
+    private $toleranceSeconds;
+
+    /** @var callable Returns the current unix time. */
+    private $clock;
+
+    public function __construct(WebhookSecretManager $secretManager, $toleranceSeconds = self::DEFAULT_TOLERANCE_SECONDS, $clock = null)
     {
         $this->secretManager = $secretManager;
+        $this->toleranceSeconds = (int) $toleranceSeconds;
+        $this->clock = $clock !== null ? $clock : 'time';
+    }
+
+    /**
+     * @param mixed $timestamp ISO 8601 string (as Reepay sends) or unix seconds / milliseconds.
+     * @return int|null Unix seconds, or null when unparsable.
+     */
+    public static function parseTimestamp($timestamp)
+    {
+        $timestamp = trim((string) $timestamp);
+        if ($timestamp === '') {
+            return null;
+        }
+        if (ctype_digit($timestamp)) {
+            $value = (int) $timestamp;
+            return $value > 100000000000 ? (int) ($value / 1000) : $value;
+        }
+        $parsed = strtotime($timestamp);
+
+        return $parsed === false ? null : $parsed;
+    }
+
+    private function isFresh($timestamp)
+    {
+        if ($this->toleranceSeconds <= 0) {
+            return true;
+        }
+        $time = self::parseTimestamp($timestamp);
+        if ($time === null) {
+            return false;
+        }
+
+        return abs(call_user_func($this->clock) - $time) <= $this->toleranceSeconds;
     }
 
     /**
@@ -48,16 +92,18 @@ class WebhookAuthenticator
             return self::RESULT_UNAUTHORIZED;
         }
 
-        if ($this->signatureMatches($payload, $secret)) {
-            return self::RESULT_OK;
+        $signed = $this->signatureMatches($payload, $secret);
+        if (!$signed) {
+            $secret = $this->secretManager->refresh();
+            $signed = $secret !== null && $this->signatureMatches($payload, $secret);
         }
 
-        $secret = $this->secretManager->refresh();
-        if ($secret !== null && $this->signatureMatches($payload, $secret)) {
-            return self::RESULT_OK;
+        if (!$signed) {
+            return self::RESULT_UNAUTHORIZED;
         }
 
-        return self::RESULT_UNAUTHORIZED;
+        // Freshness is checked only after the signature, so unsigned callers learn nothing from it.
+        return $this->isFresh($payload['timestamp']) ? self::RESULT_OK : self::RESULT_STALE;
     }
 
     private function signatureMatches($payload, $secret)

@@ -27,6 +27,7 @@ include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSignatureVerifier.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSecretManager.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookReplayGuard.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/AdminOrderContentPresenter.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/PaymentMethodMap.php';
@@ -127,6 +128,40 @@ class Reepay extends PaymentModule
         include(dirname(__FILE__) . '/sql/uninstall.php');
 
         return parent::uninstall();
+    }
+
+    /**
+     * Builds a WebhookReplayGuard backed by the reepay_webhook_event table. The table is also
+     * created here (IF NOT EXISTS) so sites that updated the files without reinstalling still work.
+     */
+    public function getWebhookReplayGuard()
+    {
+        $table = _DB_PREFIX_ . 'reepay_webhook_event';
+        $db = Db::getInstance();
+        $db->execute(
+            'CREATE TABLE IF NOT EXISTS `' . $table . '` (
+                `id_event` varchar(64) NOT NULL,
+                `created` int(10) unsigned NOT NULL,
+                PRIMARY KEY (`id_event`),
+                KEY `created` (`created`)
+            ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;'
+        );
+
+        return new WebhookReplayGuard(
+            function ($id, $now) use ($db, $table) {
+                $ok = $db->execute(
+                    'INSERT IGNORE INTO `' . $table . '` (`id_event`, `created`) VALUES (\'' . pSQL($id) . '\', ' . (int) $now . ')'
+                );
+
+                return $ok ? ((int) $db->Affected_Rows() === 1) : null;
+            },
+            function ($id) use ($db, $table) {
+                $db->execute('DELETE FROM `' . $table . '` WHERE `id_event` = \'' . pSQL($id) . '\'');
+            },
+            function ($olderThan) use ($db, $table) {
+                $db->execute('DELETE FROM `' . $table . '` WHERE `created` < ' . (int) $olderThan);
+            }
+        );
     }
 
     /**

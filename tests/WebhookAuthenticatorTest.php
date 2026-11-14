@@ -10,7 +10,7 @@ class WebhookAuthenticatorTest extends TestCase
 {
     private function payloadSignedWith($secret)
     {
-        $timestamp = '1700000000';
+        $timestamp = gmdate('Y-m-d\TH:i:s.000+00:00');
         $id = 'evt_123';
 
         return array(
@@ -124,6 +124,83 @@ class WebhookAuthenticatorTest extends TestCase
 
         $this->assertSame(WebhookAuthenticator::RESULT_OK, $result);
         $this->assertSame(1, $fetchCalls, 'must refresh from Reepay exactly once after the mismatch');
+    }
+
+    private function signedAt($timestamp, $secret)
+    {
+        return array(
+            'timestamp' => $timestamp,
+            'id' => 'evt_123',
+            'signature' => WebhookSignatureVerifier::computeSignature($timestamp, 'evt_123', $secret),
+            'event_type' => 'invoice_authorized',
+            'invoice' => '42',
+        );
+    }
+
+    public function testRejectsCorrectlySignedButStaleTimestamp()
+    {
+        $auth = new WebhookAuthenticator($this->managerAlwaysReturning('s'));
+
+        $this->assertSame(
+            WebhookAuthenticator::RESULT_STALE,
+            $auth->authenticate($this->signedAt('2020-01-01T00:00:00.000+00:00', 's'))
+        );
+    }
+
+    public function testRejectsTimestampFarInTheFuture()
+    {
+        $auth = new WebhookAuthenticator($this->managerAlwaysReturning('s'));
+
+        $this->assertSame(
+            WebhookAuthenticator::RESULT_STALE,
+            $auth->authenticate($this->signedAt((string) (time() + 3600), 's'))
+        );
+    }
+
+    public function testFreshnessWindowBoundaryIsInclusive()
+    {
+        $now = 1700000000;
+        $auth = new WebhookAuthenticator($this->managerAlwaysReturning('s'), WebhookAuthenticator::DEFAULT_TOLERANCE_SECONDS, function () use ($now) {
+            return $now;
+        });
+
+        $this->assertSame(WebhookAuthenticator::RESULT_OK, $auth->authenticate($this->signedAt((string) ($now - 900), 's')));
+        $this->assertSame(WebhookAuthenticator::RESULT_STALE, $auth->authenticate($this->signedAt((string) ($now - 901), 's')));
+    }
+
+    public function testUnparsableTimestampIsStale()
+    {
+        $auth = new WebhookAuthenticator($this->managerAlwaysReturning('s'));
+
+        $this->assertSame(WebhookAuthenticator::RESULT_STALE, $auth->authenticate($this->signedAt('not-a-date', 's')));
+    }
+
+    public function testBadSignatureWinsOverStaleTimestamp()
+    {
+        $auth = new WebhookAuthenticator($this->managerAlwaysReturning('s'));
+
+        $this->assertSame(
+            WebhookAuthenticator::RESULT_UNAUTHORIZED,
+            $auth->authenticate($this->signedAt('2020-01-01T00:00:00.000+00:00', 'other'))
+        );
+    }
+
+    public function testZeroToleranceDisablesFreshnessCheck()
+    {
+        $auth = new WebhookAuthenticator($this->managerAlwaysReturning('s'), 0);
+
+        $this->assertSame(
+            WebhookAuthenticator::RESULT_OK,
+            $auth->authenticate($this->signedAt('2020-01-01T00:00:00.000+00:00', 's'))
+        );
+    }
+
+    public function testParseTimestampAcceptsIsoSecondsAndMilliseconds()
+    {
+        $this->assertSame(1700000000, WebhookAuthenticator::parseTimestamp('2023-11-14T22:13:20.000+00:00'));
+        $this->assertSame(1700000000, WebhookAuthenticator::parseTimestamp('1700000000'));
+        $this->assertSame(1700000000, WebhookAuthenticator::parseTimestamp('1700000000000'));
+        $this->assertNull(WebhookAuthenticator::parseTimestamp(''));
     }
 
     public function testRejectsWhenSignatureStillInvalidAfterRotationRefresh()
