@@ -3,3 +3,4 @@ vendor.phpunit-test/
 vendor-test/
 .worktrees/
 .superpowers/
+.phpunit.result.cache

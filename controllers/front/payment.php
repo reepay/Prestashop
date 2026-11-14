@@ -17,6 +17,7 @@
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/ChargeSessionLog.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/ReepayChargeVerifier.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 
 class ReepayPaymentModuleFrontController extends ModuleFrontController
 {
@@ -76,22 +77,60 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         }
 
         if (isset($chargeSession->code) && $chargeSession->code == 105) {
-            //Order already paid: only trust it if the charge really belongs to this cart and covers its total
-            $verification = ReepayChargeVerifier::verify($cart, $cart->id);
-            if ($verification['status'] !== ReepayChargeVerifier::STATUS_OK) {
-                PrestaShopLogger::addLog(
-                    sprintf('Reepay payment: code 105 charge verification failed for cart id=%d (%s): %s', (int) $cart->id, $verification['status'], $verification['reason']),
-                    3,
-                    null,
-                    'Cart',
-                    (int) $cart->id,
-                    true
-                );
-                Tools::redirect('index.php?controller=order&step=1');
+            // Order already paid: only trust it if the charge really belongs to this cart and covers its total.
+            $lock = $this->module->getOrderCreationLock();
+            $lockName = OrderCreationLock::lockNameForCart($this->module->name, $cart->id);
+            $result = $lock->withLock(
+                $lockName,
+                OrderCreationLock::DEFAULT_TIMEOUT_SECONDS,
+                function () use ($cart, $customer) {
+                    if ($cart->orderExists()) {
+                        return array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
+                    }
+
+                    $verification = ReepayChargeVerifier::verify($cart, $cart->id);
+                    if ($verification['status'] !== ReepayChargeVerifier::STATUS_OK) {
+                        $this->logCode105(sprintf('charge verification failed for cart id=%d (%s): %s', (int) $cart->id, $verification['status'], $verification['reason']), $cart);
+                        return array('status' => 'invalid');
+                    }
+
+                    $total = ReepayChargeVerifier::toMajorUnits($verification['amount']);
+                    try {
+                        $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int) $cart->id_currency, false, $customer->secure_key);
+                    } catch (PrestaShopException $e) {
+                        if ($cart->orderExists()) {
+                            return array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
+                        }
+                        $this->logCode105(sprintf('validateOrder() failed for cart id=%d: %s', (int) $cart->id, $e->getMessage()), $cart);
+                        return array('status' => 'failed');
+                    }
+
+                    if (ReepayChargeVerifier::orderEndedInError($this->module->currentOrder)) {
+                        $this->logCode105(sprintf('AMOUNT MISMATCH: order id=%s for cart id=%d was set to payment error (paid=%s). Merchant follow-up needed', $this->module->currentOrder, (int) $cart->id, $total), $cart);
+                    }
+
+                    return array('status' => 'resolved', 'order_id' => $this->module->currentOrder);
+                }
+            );
+
+            if ($result === OrderCreationLock::TIMEOUT) {
+                if ($cart->orderExists()) {
+                    $result = array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
+                } else {
+                    $this->logCode105(sprintf('could not acquire order-creation lock for cart id=%d within timeout', (int) $cart->id), $cart);
+                    Tools::redirect('index.php?controller=order&step=1');
+                    return;
+                }
             }
-            $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), ReepayChargeVerifier::toMajorUnits($verification['amount']), $this->module->displayName, null, null, (int) $cart->id_currency, false, $customer->secure_key);
+
+            if ($result['status'] !== 'resolved') {
+                Tools::redirect('index.php?controller=order&step=1');
+                return;
+            }
+
             $confirmationURL = $this->context->link->getPageLink('order-confirmation');
-            Tools::redirect($confirmationURL . '?id_cart=' . $cart->id . '&id_module=' . $this->module->id . '&id_order=' . $order_id . '&key=' . $customer->secure_key);
+            Tools::redirect($confirmationURL . '?id_cart=' . $cart->id . '&id_module=' . $this->module->id . '&id_order=' . (int) $result['order_id'] . '&key=' . $customer->secure_key);
+            return;
         }
         $address = new Address(intval($cart->id_address_delivery));
         $confirmationURL = $this->context->link->getPageLink('order-confirmation');
@@ -130,6 +169,11 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
                 $this->setTemplate('module:reepay/views/templates/front/payment_embedded_1.7.tpl');
            }
         }
+    }
+
+    private function logCode105($message, Cart $cart)
+    {
+        PrestaShopLogger::addLog('Reepay payment: code 105: ' . $message, 3, null, 'Cart', (int) $cart->id, true);
     }
 
     public function createChargeSession($paymentMethod = null)

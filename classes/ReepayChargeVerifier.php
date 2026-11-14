@@ -34,6 +34,22 @@ class ReepayChargeVerifier
         return Validate::isLoadedObject($order) && (int) $order->current_state === (int) Configuration::get('PS_OS_ERROR');
     }
 
+    /** Reepay customer handle the module sends when it creates the charge session (payment.php createChargeSession()). */
+    public static function customerHandle($idCustomer)
+    {
+        return 'c_' . (int) $idCustomer;
+    }
+
+    /** True only when the charge names exactly the customer handle this shop would have sent for the cart's customer. */
+    public static function chargeBelongsToCustomer($charge, $idCustomer)
+    {
+        return is_object($charge)
+            && isset($charge->customer)
+            && is_scalar($charge->customer)
+            && (int) $idCustomer > 0
+            && (string) $charge->customer === self::customerHandle($idCustomer);
+    }
+
     public static function verify(Cart $cart, $invoiceId)
     {
         if (!Validate::isLoadedObject($cart)) {
@@ -73,6 +89,16 @@ class ReepayChargeVerifier
                 'charge handle "%s" does not equal cart id %d',
                 isset($charge->handle) ? $charge->handle : '',
                 (int) $cart->id
+            ), $charge);
+        }
+
+        // The handle is only the cart id, so a charge of another shop or an earlier install of
+        // the same Reepay account can carry the same handle. The charge must belong to this cart's customer.
+        if (!self::chargeBelongsToCustomer($charge, (int) $cart->id_customer)) {
+            return self::result(self::STATUS_MISMATCH, sprintf(
+                'charge customer "%s" does not equal expected customer "%s" (charge of another shop or customer with the same handle)',
+                isset($charge->customer) && is_scalar($charge->customer) ? $charge->customer : '',
+                self::customerHandle((int) $cart->id_customer)
             ), $charge);
         }
 
