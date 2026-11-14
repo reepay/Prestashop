@@ -59,12 +59,10 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
             Tools::redirect('index.php?controller=order&step=1');
         }
 
-        $currency = $this->context->currency;
-        $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
-
         // Validate the selected method-specific option (tampered/disabled values go back to checkout)
         $paymentMethod = $this->module->getPaymentMethodMap()->resolveSelection(Tools::getValue(PaymentMethodMap::REQUEST_PARAM));
         if ($paymentMethod === PaymentMethodMap::INVALID) {
+            PrestaShopLogger::addLog('Reepay payment: invalid payment method selection, back to checkout', 2, null, 'Cart', (int) $cart->id, true);
             Tools::redirect('index.php?controller=order&step=1');
         }
 
@@ -91,7 +89,7 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
                 );
                 Tools::redirect('index.php?controller=order&step=1');
             }
-            $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int) $currency->id, false, $customer->secure_key);
+            $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), ReepayChargeVerifier::toMajorUnits($verification['amount']), $this->module->displayName, null, null, (int) $cart->id_currency, false, $customer->secure_key);
             $confirmationURL = $this->context->link->getPageLink('order-confirmation');
             Tools::redirect($confirmationURL . '?id_cart=' . $cart->id . '&id_module=' . $this->module->id . '&id_order=' . $order_id . '&key=' . $customer->secure_key);
         }
@@ -113,6 +111,14 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         ]);
 
         if (isset($chargeSession->error)) {
+            PrestaShopLogger::addLog(
+                sprintf('Reepay payment: charge session failed for cart id=%d: %s', (int) $cart->id, json_encode($chargeSession)),
+                3,
+                null,
+                'Cart',
+                (int) $cart->id,
+                true
+            );
             Tools::redirect($this->context->link->getPageLink('order') . '?step=1');
         }
         if('window' == Configuration::get('REEPAY_CHECKOUT_TYPE')) {
@@ -141,7 +147,7 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
             "order" => [
                 "handle" => $cart->id,
                 "amount" => (int) round($cart->getOrderTotal(true, Cart::BOTH) * 100),
-                "currency" => $this->context->currency->iso_code,
+                "currency" => Currency::getCurrency((int) $cart->id_currency)['iso_code'],
                 "customer" => [
                     "email" => $customer->email,
                     "handle" => "c_" . $customer->id,

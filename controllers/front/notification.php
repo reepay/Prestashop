@@ -60,9 +60,6 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                     die('Cart not found');
                 }
                 $customer = new Customer($cart->id_customer);
-                // In a webhook request the context currency is the shop default, not the cart's.
-                $this->context->currency = new Currency((int) $cart->id_currency);
-                $total = (float) $cart->getOrderTotal(true, Cart::BOTH);
 
                 $lock = $this->module->getOrderCreationLock();
                 $lockName = OrderCreationLock::lockNameForCart($this->module->name, $cart->id);
@@ -70,7 +67,7 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                 $orderCreated = $lock->withLock(
                     $lockName,
                     OrderCreationLock::DEFAULT_TIMEOUT_SECONDS,
-                    function () use ($cart, $customer, $total, $logger, $id_cart) {
+                    function () use ($cart, $customer, $logger, $id_cart) {
                         if ($cart->OrderExists()) {
                             $logger->logInfo(sprintf('Webhook: order already exists for cart id=%d', $cart->id));
                             return false;
@@ -88,6 +85,9 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                             return $verification['status'] === ReepayChargeVerifier::STATUS_ERROR ? 'transient' : 'rejected';
                         }
 
+                        // Pay-in amount = what Reepay actually charged (verified equal to the cart total).
+                        $total = ReepayChargeVerifier::toMajorUnits($verification['amount']);
+
                         try {
                             $this->module->validateOrder(
                                 $cart->id,
@@ -101,6 +101,14 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
                                 $customer->secure_key
                             );
                             $logger->logInfo(sprintf('Webhook: order validated for cart id=%d', $cart->id));
+                            if (ReepayChargeVerifier::orderEndedInError($this->module->currentOrder)) {
+                                $logger->logError(sprintf(
+                                    'Webhook: AMOUNT MISMATCH: order id=%s for cart id=%d was set to payment error (paid=%s). Merchant follow-up needed',
+                                    $this->module->currentOrder,
+                                    $cart->id,
+                                    $total
+                                ));
+                            }
                             return true;
                         } catch (PrestaShopException $e) {
                             // Defensive only: the primary concurrency mechanism is the lock above.

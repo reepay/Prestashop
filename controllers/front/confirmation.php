@@ -100,8 +100,8 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
                     return array('status' => 'invalid');
                 }
 
-                $currency = $this->context->currency;
-                $total = (float)$cart->getOrderTotal(true, Cart::BOTH);
+                // Pay-in amount = what Reepay actually charged (verified equal to the cart total), in the cart's currency.
+                $total = ReepayChargeVerifier::toMajorUnits($verification['amount']);
                 $logger->logInfo(sprintf(
                     'Confirmation: charge verified (state=%s), validating order for cart id=%d',
                     $verification['charge']->state,
@@ -109,12 +109,20 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
                 ));
 
                 try {
-                    $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int)$currency->id, false, $customer->secure_key);
+                    $this->module->validateOrder($cart->id, Configuration::get('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED'), $total, $this->module->displayName, null, null, (int)$cart->id_currency, false, $customer->secure_key);
                     $logger->logInfo(sprintf(
                         'Confirmation: order validated. cart id=%d, order id=%s',
                         $cart->id,
                         $this->module->currentOrder
                     ));
+                    if (ReepayChargeVerifier::orderEndedInError($this->module->currentOrder)) {
+                        $logger->logError(sprintf(
+                            'Confirmation: AMOUNT MISMATCH: order id=%s for cart id=%d was set to payment error (paid=%s). Merchant follow-up needed',
+                            $this->module->currentOrder,
+                            $cart->id,
+                            $total
+                        ));
+                    }
                     return array('status' => 'resolved', 'order_id' => $this->module->currentOrder);
                 } catch (PrestaShopException $e) {
                     // Defensive only: the primary concurrency mechanism is the lock above.

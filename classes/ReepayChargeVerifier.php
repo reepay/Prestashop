@@ -18,13 +18,30 @@ class ReepayChargeVerifier
     /**
      * @param Cart $cart
      * @param mixed $invoiceId value the charge is looked up by (must be the cart id)
-     * @return array {status: string, reason: string, charge: object|null}
+     * @return array {status: string, reason: string, charge: object|null, amount: int|null}
+     *         amount = verified charge amount in minor units (only set when status is ok)
      */
+    /** Convert a verified minor-unit charge amount to the major-unit value validateOrder() expects. */
+    public static function toMajorUnits($minorAmount)
+    {
+        return round(((int) $minorAmount) / 100, 2);
+    }
+
+    /** True when PrestaShop put the order in the payment-error state (its own amount_paid vs total check). */
+    public static function orderEndedInError($idOrder)
+    {
+        $order = new Order((int) $idOrder);
+        return Validate::isLoadedObject($order) && (int) $order->current_state === (int) Configuration::get('PS_OS_ERROR');
+    }
+
     public static function verify(Cart $cart, $invoiceId)
     {
         if (!Validate::isLoadedObject($cart)) {
             return self::result(self::STATUS_MISMATCH, 'cart could not be loaded');
         }
+
+        // The cart total depends on the context currency; it must be the cart's (webhook defaults to shop currency).
+        Context::getContext()->currency = new Currency((int) $cart->id_currency);
 
         $invoiceId = (string) $invoiceId;
         if (!ctype_digit($invoiceId) || (int) $invoiceId <= 0 || (int) $invoiceId !== (int) $cart->id) {
@@ -87,11 +104,11 @@ class ReepayChargeVerifier
             ), $charge);
         }
 
-        return self::result(self::STATUS_OK, 'ok', $charge);
+        return self::result(self::STATUS_OK, 'ok', $charge, $receivedAmount);
     }
 
-    private static function result($status, $reason, $charge = null)
+    private static function result($status, $reason, $charge = null, $amount = null)
     {
-        return array('status' => $status, 'reason' => $reason, 'charge' => $charge);
+        return array('status' => $status, 'reason' => $reason, 'charge' => $charge, 'amount' => $amount);
     }
 }
