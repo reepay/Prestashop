@@ -17,4 +17,5 @@ Compatible with Prestashop versions: 8, 9
 
 ## Last Changelog
 v 1.3.9
-[Improve] - Payment improvement 
+- [Fix] - Payment improvements.
+- [Feature] - Support new Klarna payment option for all previous Klarna options.

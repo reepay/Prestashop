@@ -1,14 +1,7 @@
 ## Changelog
 v 1.3.9
-- [Feature] - Added separate checkout options for Apple Pay, Google Pay, PayPal and Klarna, each independently enabled with its own label in a new "Single Payment method" section. Selecting one restricts the Frisbii charge session to that method (`payment_methods`) in both checkout types; the server validates the chosen method against an allow-list and rejects unknown/disabled values without creating a session.
-- [Feature] - Added a "Show generic Frisbii option" setting to hide/show the existing card option alongside method-specific options; it stays visible when no method-specific option is enabled, and existing installs are unaffected.
-- [Feature] - Added a "General payment method" section (matching the WooCommerce plugin) with "Payment Methods" (restricts the generic option's payment window, empty = previous behaviour), "Payment Logos" (shown with the generic option), and "Logo Height" (also sizes method-specific logos). Saved values are server-side validated (allow-lists, CSS length).
-- [Feature] - Added a "Debug logging" setting (off by default) that logs each charge session's order handle, `payment_methods`, checkout type and result to Advanced Parameters > Logs, letting method-specific options be verified without a real payment. No customer, address or API key data is logged.
-- [Fix] - Fixed payment option logos not rendering at checkout: `Media::getMediaPath()` returned an empty source for a file system path, and the generic option referenced a non-existent `payment.jpg`.
-- [Refactor] - Added `PaymentMethodMap` as the single source of truth for method identifiers, labels, logos, config keys and charge-session payloads, plus a unit-tested `ChargeSessionLog` for the log line.
-- [Feature] - Click to Pay is now auto-included in the Frisbii payment window: `click_to_pay` is appended to `payment_methods` whenever "Payment Methods" already sends `card`, `visa` or `mc`, in both checkout types. No new setting; merchants still need Frisbii approval. Added a "Click to Pay" logo option to "Payment Logos".
-- [Feature] - Click to Pay is excluded for subscription orders: if the optional Frisbii Subscription module reports a subscription product in the cart, `click_to_pay` is omitted from the payload and its logo hidden, even if selected. Shops without that module are unaffected.
-- [Improve] - Payment improvement 
+- [Fix] - Payment improvements.
+- [Feature] - Support new Klarna payment option for all previous Klarna options.
 
 v 1.3.8.1
 - [Security] - The webhook endpoint now verifies an HMAC-SHA256 signature from Frisbii before processing any event. Requests that are malformed, unsigned, or signed with an invalid signature are rejected before any cart or order logic runs, closing a gap that previously let a forged webhook request create or modify an order.
