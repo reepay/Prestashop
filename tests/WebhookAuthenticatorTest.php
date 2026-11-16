@@ -164,8 +164,10 @@ class WebhookAuthenticatorTest extends TestCase
             return $now;
         });
 
-        $this->assertSame(WebhookAuthenticator::RESULT_OK, $auth->authenticate($this->signedAt((string) ($now - 900), 's')));
-        $this->assertSame(WebhookAuthenticator::RESULT_STALE, $auth->authenticate($this->signedAt((string) ($now - 901), 's')));
+        $this->assertSame(WebhookAuthenticator::RESULT_OK, $auth->authenticate($this->signedAt((string) ($now - 86400), 's')));
+        $this->assertSame(WebhookAuthenticator::RESULT_STALE, $auth->authenticate($this->signedAt((string) ($now - 86401), 's')));
+        $this->assertSame(WebhookAuthenticator::RESULT_OK, $auth->authenticate($this->signedAt((string) ($now + 900), 's')));
+        $this->assertSame(WebhookAuthenticator::RESULT_STALE, $auth->authenticate($this->signedAt((string) ($now + 901), 's')));
     }
 
     public function testUnparsableTimestampIsStale()

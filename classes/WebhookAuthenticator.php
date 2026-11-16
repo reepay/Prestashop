@@ -27,12 +27,19 @@ class WebhookAuthenticator
     /** Correctly signed, but the timestamp is outside the freshness window (captured/replayed triple). */
     const RESULT_STALE = 'stale';
 
-    const DEFAULT_TOLERANCE_SECONDS = 900;
+    /**
+     * How old a correctly signed webhook may be. Long enough for Reepay's delayed deliveries and retries;
+     * replay inside this window is stopped by WebhookReplayGuard (it remembers ids for longer than this).
+     */
+    const DEFAULT_TOLERANCE_SECONDS = 86400;
+
+    /** How far in the future a timestamp may be (clock difference between Reepay and this server). */
+    const FUTURE_SKEW_SECONDS = 900;
 
     /** @var WebhookSecretManager */
     private $secretManager;
 
-    /** @var int Max allowed difference (seconds, both directions) between the webhook timestamp and now. 0 disables. */
+    /** @var int Max allowed age (seconds) of the webhook timestamp; a small clock skew into the future is also allowed. 0 disables. */
     private $toleranceSeconds;
 
     /** @var callable Returns the current unix time. */
@@ -74,7 +81,9 @@ class WebhookAuthenticator
             return false;
         }
 
-        return abs(call_user_func($this->clock) - $time) <= $this->toleranceSeconds;
+        $age = call_user_func($this->clock) - $time;
+
+        return $age <= $this->toleranceSeconds && $age >= -min($this->toleranceSeconds, self::FUTURE_SKEW_SECONDS);
     }
 
     /**

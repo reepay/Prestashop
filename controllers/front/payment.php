@@ -18,6 +18,7 @@ include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/ChargeSessionLog.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/ReepayChargeVerifier.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderLinesBuilder.php';
 
 class ReepayPaymentModuleFrontController extends ModuleFrontController
 {
@@ -171,6 +172,38 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
         }
     }
 
+    /**
+     * Replaces the lump-sum amount of the order by order lines (products, shipping, wrapping, discounts)
+     * that add up to the cart total.
+     */
+    private function withOrderLines(array $order, Cart $cart)
+    {
+        $products = array();
+        foreach ($cart->getProducts() as $product) {
+            $name = $product['name'];
+            if (!empty($product['attributes_small'])) {
+                $name .= ' - ' . $product['attributes_small'];
+            }
+            $products[] = array(
+                'name' => $name,
+                'unit_price_wt' => (float) $product['price_wt'],
+                'vat_rate' => (float) $product['rate'],
+                'quantity' => (int) $product['cart_quantity'],
+            );
+        }
+
+        $extras = array(
+            array('name' => 'Shipping', 'amount_wt' => $cart->getOrderTotal(true, Cart::ONLY_SHIPPING), 'amount_tex' => $cart->getOrderTotal(false, Cart::ONLY_SHIPPING)),
+            array('name' => 'Gift wrapping', 'amount_wt' => $cart->getOrderTotal(true, Cart::ONLY_WRAPPING), 'amount_tex' => $cart->getOrderTotal(false, Cart::ONLY_WRAPPING)),
+            array('name' => 'Discount', 'amount_wt' => -$cart->getOrderTotal(true, Cart::ONLY_DISCOUNTS), 'amount_tex' => -$cart->getOrderTotal(false, Cart::ONLY_DISCOUNTS)),
+        );
+
+        unset($order['amount']);
+        $order['order_lines'] = OrderLinesBuilder::build($products, $extras, $cart->getOrderTotal(true, Cart::BOTH));
+
+        return $order;
+    }
+
     private function logCode105($message, Cart $cart)
     {
         PrestaShopLogger::addLog('Reepay payment: code 105: ' . $message, 3, null, 'Cart', (int) $cart->id, true);
@@ -230,6 +263,11 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
             $this->module->getPaymentMethodMap()->genericMethods(),
             $this->module->cartHasSubscriptionProducts($cart)
         );
+
+        // Klarna builds its invoice from order lines, so a lump-sum amount is not enough for it.
+        if (!empty($data['payment_methods']) && OrderLinesBuilder::needsOrderLines($data['payment_methods'])) {
+            $data['order'] = $this->withOrderLines($data['order'], $cart);
+        }
 
         $result = ReepayApi::createChargeSession($data);
 

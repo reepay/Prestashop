@@ -32,7 +32,7 @@ class ReepayNotificationModuleFrontController extends ModuleFrontController
             $this->module->getWebhookSecretManager(),
             ($tolerance === false || $tolerance === '' || $tolerance === null)
                 ? WebhookAuthenticator::DEFAULT_TOLERANCE_SECONDS
-                : (int) $tolerance
+                : min((int) $tolerance, WebhookReplayGuard::RETENTION_SECONDS - WebhookAuthenticator::FUTURE_SKEW_SECONDS)
         );
         $authResult = $authenticator->authenticate($webhook_body);
 

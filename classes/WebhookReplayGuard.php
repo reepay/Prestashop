@@ -23,7 +23,7 @@
 class WebhookReplayGuard
 {
     /** Longer than the authenticator's freshness window, so an id cannot be replayed once forgotten. */
-    const RETENTION_SECONDS = 3600;
+    const RETENTION_SECONDS = 90000;
 
     /** @var callable function(string $id, int $now): bool|null  true = newly claimed, false = already claimed, null = storage error */
     private $claimer;
