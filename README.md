@@ -19,3 +19,4 @@ Compatible with Prestashop versions: 8, 9
 v 1.3.9
 - [Fix] - Payment improvements.
 - [Feature] - Support new Klarna payment option for all previous Klarna options.
+- [Feature] - Supports Visa & Mastercard Click-to-pay.
