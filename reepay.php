@@ -833,8 +833,7 @@ class Reepay extends PaymentModule
         }
 
         $formActionURL = $this->context->link->getAdminLink('AdminReepay', true, null) . '&action=refundOrder&ajax';
-        $account = ReepayApi::getAccount();
-        $dashboardURL = AdminOrderContentPresenter::dashboardUrl($account->handle, $order->id_cart);
+        $dashboardURL = AdminOrderContentPresenter::dashboardUrl($order->id_cart);
 
         $refundControls = AdminOrderContentPresenter::refundControls(
             $order->current_state,

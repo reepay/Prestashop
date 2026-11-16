@@ -51,8 +51,8 @@ class AdminOrderContentPresenterTest extends TestCase
 
     public function testDashboardUrlFormat()
     {
-        $url = AdminOrderContentPresenter::dashboardUrl('acme-handle', 42);
+        $url = AdminOrderContentPresenter::dashboardUrl(42);
 
-        $this->assertSame('https://admin.reepay.com/#/acme-handle/acme-handle/invoice/42', $url);
+        $this->assertSame('https://app.frisbii.com/#/rp/payments/invoices/invoice/42', $url);
     }
 }
