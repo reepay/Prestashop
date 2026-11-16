@@ -1,5 +1,5 @@
 # Frisbii Pay
-Lastest version: 1.3.8.1
+Lastest version: 1.3.9
 
 ## Information
 Compatible with Prestashop versions: 8, 9
