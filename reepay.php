@@ -27,8 +27,11 @@ include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSignatureVerifier.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSecretManager.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookReplayGuard.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/AdminOrderContentPresenter.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/PaymentMethodMap.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/ChargeSessionLog.php';
 
 class Reepay extends PaymentModule
 {
@@ -36,7 +39,7 @@ class Reepay extends PaymentModule
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.3.8.1';
+        $this->version = '1.3.9';
         $this->author = 'Frisbii';
         $this->need_instance = 0;
 
@@ -70,6 +73,17 @@ class Reepay extends PaymentModule
 
         Configuration::updateValue('REEPAY_ENABLED', false);
         Configuration::updateValue('REEPAY_OPTION_TEXT', 'Credit card with Frisbii Payments');
+
+        // All method-specific options off, generic option on.
+        Configuration::updateValue(PaymentMethodMap::SHOW_GENERIC_KEY, true);
+        Configuration::updateValue(ChargeSessionLog::ENABLED_KEY, false);
+        Configuration::updateValue(PaymentMethodMap::METHODS_KEY, '');
+        Configuration::updateValue(PaymentMethodMap::LOGOS_KEY, '');
+        Configuration::updateValue(PaymentMethodMap::LOGO_HEIGHT_KEY, PaymentMethodMap::DEFAULT_LOGO_HEIGHT);
+        foreach (PaymentMethodMap::identifiers() as $methodId) {
+            Configuration::updateValue(PaymentMethodMap::enabledKey($methodId), false);
+            Configuration::updateValue(PaymentMethodMap::labelKey($methodId), PaymentMethodMap::defaultLabel($methodId));
+        }
 
         Configuration::updateValue('REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED', $this->getOrderStatusIdByName("Payment accepted"));
         Configuration::updateValue('REEPAY_ORDER_STATUS_REEPAY_SETTLED', $this->getOrderStatusIdByName("Shipped"));
@@ -106,10 +120,48 @@ class Reepay extends PaymentModule
         Configuration::deleteByName('REEPAY_LIVE_MODE');
         Configuration::deleteByName(WebhookSecretManager::SECRET_KEY);
         Configuration::deleteByName(WebhookSecretManager::EXPIRES_AT_KEY);
+        foreach (PaymentMethodMap::configKeys() as $key) {
+            Configuration::deleteByName($key);
+        }
+        Configuration::deleteByName(ChargeSessionLog::ENABLED_KEY);
 
         include(dirname(__FILE__) . '/sql/uninstall.php');
 
         return parent::uninstall();
+    }
+
+    /**
+     * Builds a WebhookReplayGuard backed by the reepay_webhook_event table. The table is also
+     * created here (IF NOT EXISTS) so sites that updated the files without reinstalling still work.
+     */
+    public function getWebhookReplayGuard()
+    {
+        $table = _DB_PREFIX_ . 'reepay_webhook_event';
+        $db = Db::getInstance();
+        $db->execute(
+            'CREATE TABLE IF NOT EXISTS `' . $table . '` (
+                `id_event` varchar(64) NOT NULL,
+                `created` int(10) unsigned NOT NULL,
+                PRIMARY KEY (`id_event`),
+                KEY `created` (`created`)
+            ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;'
+        );
+
+        return new WebhookReplayGuard(
+            function ($id, $now) use ($db, $table) {
+                $ok = $db->execute(
+                    'INSERT IGNORE INTO `' . $table . '` (`id_event`, `created`) VALUES (\'' . pSQL($id) . '\', ' . (int) $now . ')'
+                );
+
+                return $ok ? ((int) $db->Affected_Rows() === 1) : null;
+            },
+            function ($id) use ($db, $table) {
+                $db->execute('DELETE FROM `' . $table . '` WHERE `id_event` = \'' . pSQL($id) . '\'');
+            },
+            function ($olderThan) use ($db, $table) {
+                $db->execute('DELETE FROM `' . $table . '` WHERE `created` < ' . (int) $olderThan);
+            }
+        );
     }
 
     /**
@@ -146,6 +198,33 @@ class Reepay extends PaymentModule
      * PrestaShop DB connection, so the lock is shared across the webhook and
      * confirmation requests instead of relying on PHP process memory or the filesystem.
      */
+    public function getPaymentMethodMap()
+    {
+        return new PaymentMethodMap(function ($key) {
+            return Configuration::get($key);
+        });
+    }
+
+    /**
+     * FP-14: Click to Pay is excluded for subscriptions. This module has no subscription
+     * concept of its own; a cart is a subscription when the (optional) billwerksubscription
+     * module is installed and reports a subscription product in it. Defensive: returns false
+     * when that module is absent, disabled, or does not expose the expected method.
+     */
+    public function cartHasSubscriptionProducts(Cart $cart)
+    {
+        if (!Module::isEnabled('billwerksubscription')) {
+            return false;
+        }
+
+        $billwerkSubscription = Module::getInstanceByName('billwerksubscription');
+        if (!$billwerkSubscription || !method_exists($billwerkSubscription, 'cartHasSubscriptionProducts')) {
+            return false;
+        }
+
+        return (bool) $billwerkSubscription->cartHasSubscriptionProducts($cart);
+    }
+
     public function getOrderCreationLock()
     {
         return new OrderCreationLock(
@@ -318,7 +397,7 @@ class Reepay extends PaymentModule
             'id_language' => $this->context->language->id,
         );
 
-        return $helper->generateForm(array($this->getConfigForm()));
+        return $helper->generateForm(array($this->getConfigForm(), $this->getGeneralPaymentForm(), $this->getPaymentMethodForm()));
     }
 
     /**
@@ -388,6 +467,28 @@ class Reepay extends PaymentModule
                         'required' => true
                     ),
                     array(
+                        'type' => 'switch',
+                        'label' => $this->l('Show generic Frisbii option'),
+                        'name' => PaymentMethodMap::SHOW_GENERIC_KEY,
+                        'is_bool' => true,
+                        'desc' => $this->l('Show the generic card option alongside the method-specific options below. It is always shown when no method-specific option is enabled.'),
+                        'values' => array(
+                            array('id' => 'generic_on', 'value' => true, 'label' => $this->l('Yes')),
+                            array('id' => 'generic_off', 'value' => false, 'label' => $this->l('No')),
+                        ),
+                    ),
+                    array(
+                        'type' => 'switch',
+                        'label' => $this->l('Debug logging'),
+                        'name' => ChargeSessionLog::ENABLED_KEY,
+                        'is_bool' => true,
+                        'desc' => $this->l('Log each charge session request (payment methods sent to Frisbii, result) in Advanced Parameters > Logs. No customer data is logged.'),
+                        'values' => array(
+                            array('id' => 'debug_on', 'value' => true, 'label' => $this->l('Enabled')),
+                            array('id' => 'debug_off', 'value' => false, 'label' => $this->l('Disabled')),
+                        ),
+                    ),
+                    array(
                         'type' => 'select',
                         'label' => $this->l('Status: Frisbii Payments Authorized'),
                         'name' => 'REEPAY_ORDER_STATUS_REEPAY_AUTHORIZED',
@@ -418,11 +519,136 @@ class Reepay extends PaymentModule
     }
 
     /**
+     * "Payment method" section: one switch and one label per method shown as its own checkout option.
+     */
+    protected function getPaymentMethodForm()
+    {
+        return array(
+            'form' => array(
+                'legend' => array(
+                    'title' => $this->l('Single Payment method'),
+                    'icon' => 'icon-credit-card',
+                ),
+                'input' => $this->getPaymentMethodFormInputs(),
+                'submit' => array(
+                    'title' => $this->l('Save'),
+                ),
+            ),
+        );
+    }
+
+    /**
+     * "General payment method" section: methods offered in the Frisbii window and logos of the
+     * generic checkout option (mirrors the WooCommerce plugin's Payment Methods / Payment Logos).
+     */
+    protected function getGeneralPaymentForm()
+    {
+        $toOptions = function (array $list) {
+            $options = array();
+            foreach ($list as $id => $name) {
+                $options[] = array('id' => $id, 'name' => $name);
+            }
+            return $options;
+        };
+
+        return array(
+            'form' => array(
+                'legend' => array(
+                    'title' => $this->l('Frisbii Pay General payment method'),
+                    'icon' => 'icon-credit-card',
+                ),
+                'input' => array(
+                    array(
+                        'type' => 'select',
+                        'multiple' => true,
+                        'label' => $this->l('Payment Methods'),
+                        'name' => PaymentMethodMap::METHODS_KEY . '[]',
+                        'class' => 'fixed-width-xxl',
+                        'size' => 12,
+                        'desc' => $this->l('Payment methods offered in the Frisbii payment window of the generic option. Leave empty to offer everything enabled in your Frisbii dashboard.'),
+                        'options' => array(
+                            'query' => $toOptions(PaymentMethodMap::genericMethodOptions()),
+                            'id' => 'id',
+                            'name' => 'name',
+                        ),
+                    ),
+                    array(
+                        'type' => 'select',
+                        'multiple' => true,
+                        'label' => $this->l('Payment Logos'),
+                        'name' => PaymentMethodMap::LOGOS_KEY . '[]',
+                        'class' => 'fixed-width-xxl',
+                        'size' => 12,
+                        'desc' => $this->l('Logos shown next to the generic option at checkout. Make sure the methods are enabled in your Frisbii dashboard.'),
+                        'options' => array(
+                            'query' => $toOptions(PaymentMethodMap::logoOptions()),
+                            'id' => 'id',
+                            'name' => 'name',
+                        ),
+                    ),
+                    array(
+                        'type' => 'text',
+                        'label' => $this->l('Logo Height'),
+                        'name' => PaymentMethodMap::LOGO_HEIGHT_KEY,
+                        'class' => 'fixed-width-sm',
+                        'desc' => $this->l('Logo height in pixels (or a CSS length such as 2em).'),
+                    ),
+                ),
+                'submit' => array(
+                    'title' => $this->l('Save'),
+                ),
+            ),
+        );
+    }
+
+    /**
+     * Inputs of the "Payment method" section.
+     */
+    protected function getPaymentMethodFormInputs()
+    {
+        $inputs = array();
+        foreach (PaymentMethodMap::identifiers() as $id) {
+            $name = PaymentMethodMap::defaultLabel($id);
+            $inputs[] = array(
+                'type' => 'switch',
+                'label' => sprintf($this->l('Checkout option: %s'), $name),
+                'name' => PaymentMethodMap::enabledKey($id),
+                'is_bool' => true,
+                'desc' => sprintf($this->l('Show %s as a separate payment option at checkout'), $name),
+                'values' => array(
+                    array('id' => $id . '_on', 'value' => true, 'label' => $this->l('Enabled')),
+                    array('id' => $id . '_off', 'value' => false, 'label' => $this->l('Disabled')),
+                ),
+            );
+            $inputs[] = array(
+                'type' => 'text',
+                'label' => sprintf($this->l('%s label'), $name),
+                'name' => PaymentMethodMap::labelKey($id),
+            );
+        }
+        return $inputs;
+    }
+
+    /**
      * Set values for the inputs.
      */
     protected function getConfigFormValues()
     {
-        return array(
+        $methodMap = $this->getPaymentMethodMap();
+        $methodValues = array(PaymentMethodMap::SHOW_GENERIC_KEY => $methodMap->showGenericOption() ? 1 : 0);
+        foreach (PaymentMethodMap::identifiers() as $id) {
+            $methodValues[PaymentMethodMap::enabledKey($id)] = $methodMap->isEnabled($id) ? 1 : 0;
+            $methodValues[PaymentMethodMap::labelKey($id)] = $methodMap->label($id);
+        }
+
+        $methodValues[PaymentMethodMap::METHODS_KEY . '[]'] = $methodMap->genericMethods();
+        $methodValues[PaymentMethodMap::LOGOS_KEY . '[]'] = $methodMap->selectedLogos();
+        $methodValues[PaymentMethodMap::LOGO_HEIGHT_KEY] = Configuration::get(PaymentMethodMap::LOGO_HEIGHT_KEY) !== false
+            ? Configuration::get(PaymentMethodMap::LOGO_HEIGHT_KEY) : PaymentMethodMap::DEFAULT_LOGO_HEIGHT;
+
+        $methodValues[ChargeSessionLog::ENABLED_KEY] = (int) Configuration::get(ChargeSessionLog::ENABLED_KEY);
+
+        return $methodValues + array(
             'REEPAY_ENABLED' => Configuration::get('REEPAY_ENABLED', false),
             'REEPAY_PRIVATE_API_KEY' => Configuration::get('REEPAY_PRIVATE_API_KEY'),
             'REEPAY_OPTION_TEXT' => Configuration::get('REEPAY_OPTION_TEXT'),
@@ -441,6 +667,14 @@ class Reepay extends PaymentModule
 
         foreach (array_keys($form_values) as $key) {
             if ($skipPrivateApiKey && $key === 'REEPAY_PRIVATE_API_KEY') {
+                continue;
+            }
+            if ($key === PaymentMethodMap::METHODS_KEY . '[]') {
+                Configuration::updateValue(PaymentMethodMap::METHODS_KEY, PaymentMethodMap::encodeMethods(Tools::getValue(PaymentMethodMap::METHODS_KEY, array())));
+                continue;
+            }
+            if ($key === PaymentMethodMap::LOGOS_KEY . '[]') {
+                Configuration::updateValue(PaymentMethodMap::LOGOS_KEY, PaymentMethodMap::encodeLogos(Tools::getValue(PaymentMethodMap::LOGOS_KEY, array())));
                 continue;
             }
             Configuration::updateValue($key, Tools::getValue($key));
@@ -488,6 +722,11 @@ class Reepay extends PaymentModule
         $this->context->controller->addJS($this->_path . 'views/js/lib/sweetalert2.js');
         $this->context->controller->addJS($this->_path . '/views/js/front.js');
         $this->context->controller->addCSS($this->_path . '/views/css/front.css');
+
+        // Logo Height (sanitised by PaymentMethodMap::logoHeight) also sizes the single-method option logos.
+        $height = $this->getPaymentMethodMap()->logoHeight();
+        return '<style>.payment-option__label img[src*="/modules/' . $this->name . '/views/img/"]'
+            . '{height:' . $height . ';max-height:' . $height . ';width:auto}</style>';
     }
 
     /**
@@ -506,11 +745,62 @@ class Reepay extends PaymentModule
             return [];
         }
 
-        $embedded = new PrestaShop\PrestaShop\Core\Payment\PaymentOption();
-        $embedded->setCallToActionText(Configuration::get('REEPAY_OPTION_TEXT'))
-            ->setAction($this->context->link->getModuleLink($this->name, 'payment', array(), true))
-            ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_ . $this->name . '/payment.jpg'));
-        return [$embedded];
+        $methodMap = $this->getPaymentMethodMap();
+        $options = [];
+
+        foreach ($methodMap->enabledMethods() as $method) {
+            $option = new PrestaShop\PrestaShop\Core\Payment\PaymentOption();
+            $option->setCallToActionText($method['label'])
+                ->setAction($this->context->link->getModuleLink($this->name, 'payment', [PaymentMethodMap::REQUEST_PARAM => $method['id']], true));
+            if (file_exists(_PS_MODULE_DIR_ . $this->name . '/views/img/' . $method['id'] . '.png')) {
+                $option->setLogo($this->context->link->getMediaLink(_MODULE_DIR_ . $this->name . '/views/img/' . $method['id'] . '.png'));
+            }
+            $options[] = $option;
+        }
+
+        if ($methodMap->showGenericOption()) {
+            $hasSubscriptionProduct = isset($params['cart']) && $params['cart'] instanceof Cart
+                ? $this->cartHasSubscriptionProducts($params['cart'])
+                : false;
+
+            $embedded = new PrestaShop\PrestaShop\Core\Payment\PaymentOption();
+            $embedded->setCallToActionText(Configuration::get('REEPAY_OPTION_TEXT'))
+                ->setAction($this->context->link->getModuleLink($this->name, 'payment', array(), true));
+            $logosHtml = $this->renderGenericLogos($methodMap, $hasSubscriptionProduct);
+            if ($logosHtml !== '') {
+                $embedded->setAdditionalInformation($logosHtml);
+            }
+            $options[] = $embedded;
+        }
+
+        return $options;
+    }
+
+    /**
+     * HTML of the selected payment logos (height from "Logo Height"), or '' when none is selected
+     * or the logo files are missing. Only allow-listed ids reach the file system and the markup.
+     *
+     * @param bool $hasSubscriptionProduct FP-14: the Click to Pay logo is never shown for a
+     *                                     subscription cart, even when selected in "Payment Logos".
+     */
+    protected function renderGenericLogos(PaymentMethodMap $methodMap, $hasSubscriptionProduct = false)
+    {
+        $height = $methodMap->logoHeight();
+        $logoOptions = PaymentMethodMap::logoOptions();
+        $html = '';
+        foreach ($methodMap->selectedLogos() as $logoId) {
+            if ($hasSubscriptionProduct && $logoId === PaymentMethodMap::CLICK_TO_PAY) {
+                continue;
+            }
+            $file = _PS_MODULE_DIR_ . $this->name . '/views/img/' . $logoId . '.png';
+            if (!file_exists($file)) {
+                continue;
+            }
+            $html .= '<img class="reepay-logo" src="' . Tools::safeOutput($this->context->link->getMediaLink(_MODULE_DIR_ . $this->name . '/views/img/' . $logoId . '.png')) . '"'
+                . ' alt="' . Tools::safeOutput($logoOptions[$logoId]) . '"'
+                . ' style="height:' . Tools::safeOutput($height) . ';max-height:' . Tools::safeOutput($height) . ';margin-right:4px">';
+        }
+        return $html;
     }
 
     public function hookActionOrderStatusUpdate($params)
@@ -543,8 +833,7 @@ class Reepay extends PaymentModule
         }
 
         $formActionURL = $this->context->link->getAdminLink('AdminReepay', true, null) . '&action=refundOrder&ajax';
-        $account = ReepayApi::getAccount();
-        $dashboardURL = AdminOrderContentPresenter::dashboardUrl($account->handle, $order->id_cart);
+        $dashboardURL = AdminOrderContentPresenter::dashboardUrl($order->id_cart);
 
         $refundControls = AdminOrderContentPresenter::refundControls(
             $order->current_state,

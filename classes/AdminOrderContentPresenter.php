@@ -77,8 +77,8 @@ class AdminOrderContentPresenter
         );
     }
 
-    public static function dashboardUrl($accountHandle, $idCart)
+    public static function dashboardUrl($idCart)
     {
-        return 'https://admin.reepay.com/#/' . $accountHandle . '/' . $accountHandle . '/invoice/' . $idCart;
+        return 'https://app.frisbii.com/#/rp/payments/invoices/invoice/' . rawurlencode((string) $idCart);
     }
 }
