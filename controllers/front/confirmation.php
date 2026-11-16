@@ -15,6 +15,7 @@
  */
 
 include_once _PS_MODULE_DIR_ . 'reepay/api/ReepayApi.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/ConfirmationAccess.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/ReepayChargeVerifier.php';
 
@@ -56,6 +57,17 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
         $cart = new Cart($invoiceId);
 
         $customer = new Customer($cart->id_customer);
+
+        // FP-16: the order-confirmation URL carries the customer's secure_key and the order id, so it may only
+        // be given to the owner of the cart. Anyone else (including an app-switch return without the shop
+        // session) may still trigger order creation for a verified paid cart, but is sent to the shop home.
+        $isOwner = ConfirmationAccess::isCartOwnedBySession(
+            isset($this->context->cart) ? (int) $this->context->cart->id : 0,
+            isset($this->context->customer) ? (int) $this->context->customer->id : 0,
+            isset($this->context->customer) && $this->context->customer->isLogged(true),
+            (int) $cart->id,
+            (int) $cart->id_customer
+        );
 
         $lock = $this->module->getOrderCreationLock();
         $lockName = OrderCreationLock::lockNameForCart($this->module->name, $cart->id);
@@ -157,9 +169,20 @@ class ReepayConfirmationModuleFrontController extends ModuleFrontController
                 $result = array('status' => 'resolved', 'order_id' => $this->module->resolveOrderIdByCartId($cart->id));
             } else {
                 $logger->logError(sprintf('Confirmation: could not acquire order-creation lock for cart id=%d within timeout', $cart->id));
-                Tools::redirect('index.php?controller=order&step=1');
+                Tools::redirect($isOwner ? 'index.php?controller=order&step=1' : 'index.php');
                 return;
             }
+        }
+
+        if (!$isOwner) {
+            // Same target for every outcome, so the answer does not tell a stranger whether the cart has an order.
+            $logger->logInfo(sprintf(
+                'Confirmation: visitor is not the owner of cart id=%d. Redirecting to shop home without order id or key (status=%s)',
+                $cart->id,
+                $result['status']
+            ));
+            Tools::redirect('index.php');
+            return;
         }
 
         if ($result['status'] === 'invalid' || $result['status'] === 'failed') {
