@@ -103,7 +103,7 @@ class WebhookAuthenticator
 
         $signed = $this->signatureMatches($payload, $secret);
         if (!$signed) {
-            $secret = $this->secretManager->refresh();
+            $secret = $this->secretManager->refreshAfterMismatch();
             $signed = $secret !== null && $this->signatureMatches($payload, $secret);
         }
 

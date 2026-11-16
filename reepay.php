@@ -120,6 +120,7 @@ class Reepay extends PaymentModule
         Configuration::deleteByName('REEPAY_LIVE_MODE');
         Configuration::deleteByName(WebhookSecretManager::SECRET_KEY);
         Configuration::deleteByName(WebhookSecretManager::EXPIRES_AT_KEY);
+        Configuration::deleteByName(WebhookSecretManager::LAST_FORCED_KEY);
         foreach (PaymentMethodMap::configKeys() as $key) {
             Configuration::deleteByName($key);
         }

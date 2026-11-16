@@ -134,4 +134,94 @@ class WebhookSecretManagerTest extends TestCase
         $this->assertFalse($config->get('REEPAY_WEBHOOK_SECRET'));
         $this->assertFalse($config->get('REEPAY_WEBHOOK_SECRET_EXPIRES_AT'));
     }
+
+    private function managerWithClock($config, &$fetchCalls, &$now, $secret = 'new-secret')
+    {
+        $fetcher = function () use (&$fetchCalls, $secret) {
+            $fetchCalls++;
+            return $secret;
+        };
+
+        return new WebhookSecretManager(
+            $fetcher,
+            array($config, 'get'),
+            array($config, 'set'),
+            array($config, 'delete'),
+            function () use (&$now) {
+                return $now;
+            }
+        );
+    }
+
+    public function testRefreshAfterMismatchIsLimitedToOncePerCooldown()
+    {
+        $config = $this->fakeConfigAccessor();
+        $fetchCalls = 0;
+        $now = 1000000;
+        $manager = $this->managerWithClock($config, $fetchCalls, $now);
+
+        $this->assertSame('new-secret', $manager->refreshAfterMismatch());
+        $now += 10;
+        for ($i = 0; $i < 20; $i++) {
+            $this->assertNull($manager->refreshAfterMismatch());
+        }
+
+        $this->assertSame(1, $fetchCalls, 'only the first mismatch may call Reepay inside the cool-down');
+    }
+
+    public function testRefreshAfterMismatchIsAllowedAgainAfterCooldown()
+    {
+        $config = $this->fakeConfigAccessor();
+        $fetchCalls = 0;
+        $now = 1000000;
+        $manager = $this->managerWithClock($config, $fetchCalls, $now);
+
+        $manager->refreshAfterMismatch();
+        $now += WebhookSecretManager::FORCED_COOLDOWN_SECONDS;
+
+        $this->assertSame('new-secret', $manager->refreshAfterMismatch());
+        $this->assertSame(2, $fetchCalls);
+    }
+
+    public function testFailedForcedRefreshAlsoStartsCooldown()
+    {
+        $config = $this->fakeConfigAccessor();
+        $fetchCalls = 0;
+        $now = 1000000;
+        $manager = $this->managerWithClock($config, $fetchCalls, $now, null);
+
+        $this->assertNull($manager->refreshAfterMismatch());
+        $now += 5;
+        $this->assertNull($manager->refreshAfterMismatch());
+
+        $this->assertSame(1, $fetchCalls, 'a failed refresh must count as an attempt');
+    }
+
+    public function testGetSecretStillUsesCacheWithoutForcedRefresh()
+    {
+        $config = $this->fakeConfigAccessor();
+        $config->set(WebhookSecretManager::SECRET_KEY, 'cached');
+        $config->set(WebhookSecretManager::EXPIRES_AT_KEY, time() + 300);
+        $fetchCalls = 0;
+        $now = time();
+        $manager = $this->managerWithClock($config, $fetchCalls, $now);
+
+        $this->assertSame('cached', $manager->getSecret());
+        $this->assertSame(0, $fetchCalls);
+    }
+
+    public function testInvalidateClearsCooldown()
+    {
+        $config = $this->fakeConfigAccessor();
+        $fetchCalls = 0;
+        $now = 1000000;
+        $manager = $this->managerWithClock($config, $fetchCalls, $now);
+
+        $manager->refreshAfterMismatch();
+        $manager->invalidate();
+
+        $this->assertFalse($config->get(WebhookSecretManager::LAST_FORCED_KEY));
+        $this->assertSame('new-secret', $manager->refreshAfterMismatch());
+        $this->assertSame(2, $fetchCalls);
+    }
 }
