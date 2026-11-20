@@ -49,6 +49,17 @@ class AdminOrderContentPresenterTest extends TestCase
         $this->assertStringContainsString('placeholder="Order not settled"', $controls['input']);
     }
 
+    public function testRefundControlsKeepOnlyANumberInTheMaxAttribute()
+    {
+        // FP-23: the total comes from the order, but it must never be able to break the attribute.
+        foreach (array(true, false) as $settled) {
+            $controls = AdminOrderContentPresenter::refundControls($settled ? 5 : 3, 5, '1"><script>alert(1)</script>');
+
+            $this->assertStringContainsString('max="1.00"', $controls['input']);
+            $this->assertStringNotContainsString('<script', $controls['input']);
+        }
+    }
+
     public function testDashboardUrlFormat()
     {
         $url = AdminOrderContentPresenter::dashboardUrl(42);

@@ -73,15 +73,17 @@ class AdminOrderContentPresenter
      */
     public static function refundControls($currentOrderStatusId, $settledOrderStatusId, $totalPaid)
     {
+        $max = number_format((float) $totalPaid, 2, '.', '');
+
         if (self::isSettled($currentOrderStatusId, $settledOrderStatusId)) {
             return array(
-                'input' => '<input type="number" step="0.01" max="' . $totalPaid . '" required class="form-control" name="refundAmount" placeholder="Amount">',
+                'input' => '<input type="number" step="0.01" max="' . $max . '" required class="form-control" name="refundAmount" placeholder="Amount">',
                 'buttonDisabled' => '',
             );
         }
 
         return array(
-            'input' => '<input type="number" step="0.01" max="' . $totalPaid . '" required disabled class="form-control" name="refundAmount" placeholder="Order not settled">',
+            'input' => '<input type="number" step="0.01" max="' . $max . '" required disabled class="form-control" name="refundAmount" placeholder="Order not settled">',
             'buttonDisabled' => 'disabled',
         );
     }
