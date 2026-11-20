@@ -57,13 +57,18 @@
 
 </div>
 
+{if $refundNotice}
+    <div class="alert {if $refundNotice.success}alert-success{else}alert-danger{/if}" role="alert">
+        {$refundNotice.message|escape:'html':'UTF-8'}
+    </div>
+{/if}
+
 <div  class="card-1 no-print">
     <img src="{$logoSrc}" width="81px" height="24px" alt="Frisbii logo"/>
     <form class="form-inline pull-right" action="{$formActionURL}" method="POST">
         <div class="form-group">
         <label>Refund: </label>
-        <input type="hidden"  required name="orderNumber" value="{$orderNumber}">
-        <input type="hidden" name="backURL" value="http://{$smarty.server.HTTP_HOST}{$smarty.server.REQUEST_URI}">
+        <input type="hidden" required name="id_order" value="{$orderId|intval}">
         {$refundAmountInput}
         </div>
         <button type="submit" class="btn btn-default {$refundButtonDisabled}">Refund order</button>

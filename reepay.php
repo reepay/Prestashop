@@ -29,12 +29,16 @@ include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSecretManager.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookReplayGuard.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/AdminOrderContentPresenter.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/RefundRequestValidator.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/PaymentMethodMap.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/ChargeSessionLog.php';
 
 class Reepay extends PaymentModule
 {
+    /** Employee cookie key that carries the result of the last admin refund to the order page. */
+    const REFUND_NOTICE_COOKIE_KEY = 'reepay_refund_notice';
+
     public function __construct()
     {
         $this->name = 'reepay';
@@ -844,13 +848,27 @@ class Reepay extends PaymentModule
 
         $invoice = ReepayApi::getInvoice($order->id_cart);
 
+        // Result of the last refund (FP-20): shown once, then removed from the employee cookie.
+        $refundNotice = null;
+        $cookieKey = self::REFUND_NOTICE_COOKIE_KEY;
+        if (isset($this->context->cookie->{$cookieKey})) {
+            $code = (string) $this->context->cookie->{$cookieKey};
+            $refundNotice = array(
+                'success' => $code === RefundRequestValidator::RESULT_OK,
+                'message' => RefundRequestValidator::message($code),
+            );
+            unset($this->context->cookie->{$cookieKey});
+            $this->context->cookie->write();
+        }
+
         $this->smarty->assign(array(
+            'refundNotice' => $refundNotice,
+            'orderId' => (int) $order->id,
             'logoSrc' =>  "/modules/" . $this->name . '/views/img/logo.png?' . time(),
             'refundButtonDisabled' => $refundControls['buttonDisabled'],
             'refundAmountInput' => $refundControls['input'],
             'dashboardURL' => $dashboardURL,
             'formActionURL' => $formActionURL,
-            'orderNumber' => $order->id_cart,
             'invoice' => $invoice,
             'cardLogo' => $this->get_logo($invoice->transactions[0]->card_transaction->card_type)
         ));

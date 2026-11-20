@@ -58,13 +58,22 @@ class AdminOrderContentPresenter
     }
 
     /**
+     * The one rule for "this order may be refunded", used by the form and by the server check.
+     *
+     * @return bool
+     */
+    public static function isSettled($currentOrderStatusId, $settledOrderStatusId)
+    {
+        return (int) $settledOrderStatusId > 0
+            && (int) $currentOrderStatusId === (int) $settledOrderStatusId;
+    }
+
+    /**
      * @return array{input: string, buttonDisabled: string}
      */
     public static function refundControls($currentOrderStatusId, $settledOrderStatusId, $totalPaid)
     {
-        $isSettled = (int) $currentOrderStatusId === (int) $settledOrderStatusId;
-
-        if ($isSettled) {
+        if (self::isSettled($currentOrderStatusId, $settledOrderStatusId)) {
             return array(
                 'input' => '<input type="number" step="0.01" max="' . $totalPaid . '" required class="form-control" name="refundAmount" placeholder="Amount">',
                 'buttonDisabled' => '',
