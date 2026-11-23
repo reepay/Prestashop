@@ -66,4 +66,34 @@ class AdminOrderContentPresenterTest extends TestCase
 
         $this->assertSame('https://app.frisbii.com/#/rp/payments/invoices/invoice/42', $url);
     }
+
+    public function testUnreadableInvoicesAreDetected()
+    {
+        // FP-20 / Bugbot: a failed read must never be handled like an invoice.
+        foreach (array(null, false, 'text', array(), (object) array('error' => 'Invoice not found')) as $answer) {
+            $this->assertFalse(AdminOrderContentPresenter::isReadableInvoice($answer));
+            $this->assertNull(AdminOrderContentPresenter::cardType($answer));
+        }
+        $this->assertTrue(AdminOrderContentPresenter::isReadableInvoice((object) array('handle' => '42')));
+    }
+
+    public function testCardTypeIsReadFromTheFirstTransaction()
+    {
+        $invoice = json_decode('{"transactions":[{"card_transaction":{"card_type":"visa"}}]}');
+
+        $this->assertSame('visa', AdminOrderContentPresenter::cardType($invoice));
+    }
+
+    public function testCardTypeIsNullWhenThereIsNoCardTransaction()
+    {
+        foreach (array('{}', '{"transactions":null}', '{"transactions":[]}', '{"transactions":[{}]}', '{"transactions":[{"card_transaction":{}}]}', '{"transactions":[{"card_transaction":{"card_type":5}}]}') as $json) {
+            $this->assertNull(AdminOrderContentPresenter::cardType(json_decode($json)), $json);
+        }
+    }
+
+    public function testCardLogoPathAcceptsNullAndNonStrings()
+    {
+        $this->assertNull(AdminOrderContentPresenter::cardLogoPath('reepay', null));
+        $this->assertNull(AdminOrderContentPresenter::cardLogoPath('reepay', array('visa')));
+    }
 }

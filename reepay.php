@@ -847,6 +847,8 @@ class Reepay extends PaymentModule
         );
 
         $invoice = ReepayApi::getInvoice($order->id_cart);
+        // A failed read must not hide the refund notice below: the panel shows a message instead of the invoice.
+        $invoiceReadable = AdminOrderContentPresenter::isReadableInvoice($invoice);
 
         // Result of the last refund (FP-20): shown once, then removed from the employee cookie.
         $refundNotice = null;
@@ -869,8 +871,10 @@ class Reepay extends PaymentModule
             'refundAmountInput' => $refundControls['input'],
             'dashboardURL' => $dashboardURL,
             'formActionURL' => $formActionURL,
-            'invoice' => $invoice,
-            'cardLogo' => $this->get_logo($invoice->transactions[0]->card_transaction->card_type)
+            'invoice' => $invoiceReadable ? $invoice : null,
+            'invoiceReadable' => $invoiceReadable,
+            'cardType' => AdminOrderContentPresenter::cardType($invoice),
+            'cardLogo' => $this->get_logo(AdminOrderContentPresenter::cardType($invoice))
         ));
 
         $output = "";

@@ -12,6 +12,19 @@
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  *}
 
+{if $refundNotice}
+    <div class="alert {if $refundNotice.success}alert-success{else}alert-danger{/if}" role="alert">
+        {$refundNotice.message|escape:'html':'UTF-8'}
+    </div>
+{/if}
+
+{if !$invoiceReadable}
+    <div class="alert alert-warning" role="alert">
+        {l s='The invoice could not be read at Frisbii. The payment details are not shown.' mod='reepay'}
+    </div>
+{/if}
+
+{if $invoiceReadable}
 <div class="card-1 no-print">
 
     <div class="card-header">
@@ -30,9 +43,9 @@
         <strong>Invoice id</strong>
         <p class="mb-0"> {$invoice->id|escape:'html':'UTF-8'}</p>
 
-        {if $invoice->transactions[0]->card_transaction->card_type}
+        {if $cardType}
             <strong>Card</strong>
-            <p class="mb-0"> {$invoice->transactions[0]->card_transaction->card_type|escape:'html':'UTF-8'}</p>
+            <p class="mb-0"> {$cardType|escape:'html':'UTF-8'}</p>
             <strong>Masked card</strong>
             <p class="mb-0"> {$invoice->transactions[0]->card_transaction->masked_card|escape:'html':'UTF-8'}</p>
             <br/>
@@ -56,11 +69,6 @@
 </div>
 
 </div>
-
-{if $refundNotice}
-    <div class="alert {if $refundNotice.success}alert-success{else}alert-danger{/if}" role="alert">
-        {$refundNotice.message|escape:'html':'UTF-8'}
-    </div>
 {/if}
 
 <div  class="card-1 no-print">
@@ -84,6 +92,7 @@
             </tr>
         </thead>
         <tbody>
+            {if $invoiceReadable}
             {foreach from=$invoice->transactions item=transaction}
                 <tr>
                     <td style="padding:.75rem;">
@@ -100,6 +109,7 @@
                     </td>
                 </tr>
             {/foreach}
+            {/if}
         </tbody>
     </table>
 </div>

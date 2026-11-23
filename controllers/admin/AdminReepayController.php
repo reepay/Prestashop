@@ -40,7 +40,7 @@ class AdminReepayController extends ModuleAdminController
         $cartId = (string) $order->id_cart;
 
         $invoice = ReepayApi::getInvoice($cartId);
-        if (!is_object($invoice) || isset($invoice->error)) {
+        if (!AdminOrderContentPresenter::isReadableInvoice($invoice)) {
             $logger->logError(sprintf('Refund refused: cannot read invoice. cart=%s', $cartId));
             $this->finish($order, RefundRequestValidator::REASON_INVOICE_UNREADABLE);
             return;
