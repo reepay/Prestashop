@@ -230,4 +230,33 @@ class WebhookAuthenticatorTest extends TestCase
         $this->assertSame(WebhookAuthenticator::RESULT_UNAUTHORIZED, $result);
         $this->assertSame(1, $fetchCalls, 'must not retry refresh more than once');
     }
+
+    public function testManyWrongSignaturesCallReepayOnlyOnce()
+    {
+        $store = array('REEPAY_WEBHOOK_SECRET' => 'cached-secret', 'REEPAY_WEBHOOK_SECRET_EXPIRES_AT' => time() + 600);
+        $fetchCalls = 0;
+        $fetcher = function () use (&$fetchCalls) {
+            $fetchCalls++;
+            return 'cached-secret';
+        };
+        $get = function ($key) use (&$store) {
+            return isset($store[$key]) ? $store[$key] : false;
+        };
+        $set = function ($key, $value) use (&$store) {
+            $store[$key] = $value;
+        };
+        $delete = function ($key) use (&$store) {
+            unset($store[$key]);
+        };
+        $auth = new WebhookAuthenticator(new WebhookSecretManager($fetcher, $get, $set, $delete));
+
+        for ($i = 0; $i < 20; $i++) {
+            $this->assertSame(
+                WebhookAuthenticator::RESULT_UNAUTHORIZED,
+                $auth->authenticate($this->payloadSignedWith('attacker-guess-' . $i))
+            );
+        }
+
+        $this->assertSame(1, $fetchCalls, '20 wrong signatures must cost one Reepay call');
+    }
 }

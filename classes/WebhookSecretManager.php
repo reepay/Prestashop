@@ -26,6 +26,14 @@ class WebhookSecretManager
     const CACHE_TTL_SECONDS = 600;
     const SECRET_KEY = 'REEPAY_WEBHOOK_SECRET';
     const EXPIRES_AT_KEY = 'REEPAY_WEBHOOK_SECRET_EXPIRES_AT';
+    const LAST_FORCED_KEY = 'REEPAY_WEBHOOK_SECRET_LAST_FORCED';
+
+    /**
+     * Minimum seconds between forced refreshes caused by a signature mismatch.
+     * The webhook URL is public, so without this limit every request with a wrong
+     * signature would call the Reepay API with the shop's private key.
+     */
+    const FORCED_COOLDOWN_SECONDS = 60;
 
     /** @var callable Returns the current secret string from Reepay, or null on failure. */
     private $fetcher;
@@ -39,8 +47,12 @@ class WebhookSecretManager
     /** @var callable function(string $key): void */
     private $configDelete;
 
-    public function __construct(callable $fetcher, callable $configGet, callable $configSet, callable $configDelete)
+    /** @var callable Returns the current unix time. */
+    private $clock;
+
+    public function __construct(callable $fetcher, callable $configGet, callable $configSet, callable $configDelete, $clock = null)
     {
+        $this->clock = $clock !== null ? $clock : 'time';
         $this->fetcher = $fetcher;
         $this->configGet = $configGet;
         $this->configSet = $configSet;
@@ -81,8 +93,34 @@ class WebhookSecretManager
         return $secret;
     }
 
+    /**
+     * Refresh used after a signature mismatch (secret rotation), at most once per
+     * FORCED_COOLDOWN_SECONDS. A failed attempt counts too, so a Reepay outage does not
+     * become one API call per request. The time is written before the call so parallel
+     * requests do not all pass.
+     *
+     * Trade-off: during the cool-down a genuine webhook signed with a rotated secret is
+     * refused (401); Reepay retries it and a later retry is accepted.
+     *
+     * @return string|null The new secret, or null when the cool-down is active or the fetch failed.
+     */
+    public function refreshAfterMismatch()
+    {
+        $now = (int) call_user_func($this->clock);
+        $last = (int) call_user_func($this->configGet, self::LAST_FORCED_KEY);
+
+        if ($last > 0 && $now - $last >= 0 && $now - $last < self::FORCED_COOLDOWN_SECONDS) {
+            return null;
+        }
+
+        call_user_func($this->configSet, self::LAST_FORCED_KEY, $now);
+
+        return $this->refresh();
+    }
+
     public function invalidate()
     {
+        call_user_func($this->configDelete, self::LAST_FORCED_KEY);
         call_user_func($this->configDelete, self::SECRET_KEY);
         call_user_func($this->configDelete, self::EXPIRES_AT_KEY);
     }

@@ -1,4 +1,7 @@
 ## Changelog
+v 1.3.10
+- [Fix] - Payment improvements.
+
 v 1.3.9
 - [Fix] - Payment improvements.
 - [Feature] - Support new Klarna payment option for all previous Klarna options.

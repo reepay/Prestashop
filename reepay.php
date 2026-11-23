@@ -29,17 +29,21 @@ include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookSecretManager.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookAuthenticator.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/WebhookReplayGuard.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/AdminOrderContentPresenter.php';
+include_once _PS_MODULE_DIR_ . 'reepay/classes/RefundRequestValidator.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/OrderCreationLock.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/PaymentMethodMap.php';
 include_once _PS_MODULE_DIR_ . 'reepay/classes/ChargeSessionLog.php';
 
 class Reepay extends PaymentModule
 {
+    /** Employee cookie key that carries the result of the last admin refund to the order page. */
+    const REFUND_NOTICE_COOKIE_KEY = 'reepay_refund_notice';
+
     public function __construct()
     {
         $this->name = 'reepay';
         $this->tab = 'payments_gateways';
-        $this->version = '1.3.9';
+        $this->version = '1.3.10';
         $this->author = 'Frisbii';
         $this->need_instance = 0;
 
@@ -120,6 +124,7 @@ class Reepay extends PaymentModule
         Configuration::deleteByName('REEPAY_LIVE_MODE');
         Configuration::deleteByName(WebhookSecretManager::SECRET_KEY);
         Configuration::deleteByName(WebhookSecretManager::EXPIRES_AT_KEY);
+        Configuration::deleteByName(WebhookSecretManager::LAST_FORCED_KEY);
         foreach (PaymentMethodMap::configKeys() as $key) {
             Configuration::deleteByName($key);
         }
@@ -842,16 +847,34 @@ class Reepay extends PaymentModule
         );
 
         $invoice = ReepayApi::getInvoice($order->id_cart);
+        // A failed read must not hide the refund notice below: the panel shows a message instead of the invoice.
+        $invoiceReadable = AdminOrderContentPresenter::isReadableInvoice($invoice);
+
+        // Result of the last refund (FP-20): shown once, then removed from the employee cookie.
+        $refundNotice = null;
+        $cookieKey = self::REFUND_NOTICE_COOKIE_KEY;
+        if (isset($this->context->cookie->{$cookieKey})) {
+            $code = (string) $this->context->cookie->{$cookieKey};
+            $refundNotice = array(
+                'success' => $code === RefundRequestValidator::RESULT_OK,
+                'message' => RefundRequestValidator::message($code),
+            );
+            unset($this->context->cookie->{$cookieKey});
+            $this->context->cookie->write();
+        }
 
         $this->smarty->assign(array(
+            'refundNotice' => $refundNotice,
+            'orderId' => (int) $order->id,
             'logoSrc' =>  "/modules/" . $this->name . '/views/img/logo.png?' . time(),
             'refundButtonDisabled' => $refundControls['buttonDisabled'],
             'refundAmountInput' => $refundControls['input'],
             'dashboardURL' => $dashboardURL,
             'formActionURL' => $formActionURL,
-            'orderNumber' => $order->id_cart,
-            'invoice' => $invoice,
-            'cardLogo' => $this->get_logo($invoice->transactions[0]->card_transaction->card_type)
+            'invoice' => $invoiceReadable ? $invoice : null,
+            'invoiceReadable' => $invoiceReadable,
+            'cardType' => AdminOrderContentPresenter::cardType($invoice),
+            'cardLogo' => $this->get_logo(AdminOrderContentPresenter::cardType($invoice))
         ));
 
         $output = "";
@@ -897,7 +920,6 @@ class Reepay extends PaymentModule
         $this->smarty->assign(array(
             'id_order' => $order->id,
             'reference' => $order->reference,
-            'params' => $params,
             'total' => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
         ));
         ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
