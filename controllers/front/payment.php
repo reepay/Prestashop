@@ -133,20 +133,13 @@ class ReepayPaymentModuleFrontController extends ModuleFrontController
             Tools::redirect($confirmationURL . '?id_cart=' . $cart->id . '&id_module=' . $this->module->id . '&id_order=' . (int) $result['order_id'] . '&key=' . $customer->secure_key);
             return;
         }
-        $address = new Address(intval($cart->id_address_delivery));
         $confirmationURL = $this->context->link->getPageLink('order-confirmation');
         $confirmURL = Context::getContext()->link->getModuleLink('reepay', 'confirmation');
         $this->context->smarty->assign([
-            'params' => $_REQUEST,
             'chargeSession' => $chargeSession,
             'loadingText' => 'Confirming payment, please wait and do not close this window',
             'confirmURL' => $confirmURL,
             'orderConfirmationURL' => $confirmationURL . '?id_cart=' . $cart->id . '&id_module=' . $this->module->id . '&id_order=' . $order_id . '&key=' . $customer->secure_key,
-            'debug' => [
-                "cart" => $cart,
-                "address" => new Address(intval($cart->id_address_delivery)),
-                "eiewdd" => Country::getIsoById(Country::getIdByName($this->context->language->id, $address->country))
-            ],
             'frisbii_checkout_url' => self::FRISBII_CHECKOUT_URL,
         ]);
 

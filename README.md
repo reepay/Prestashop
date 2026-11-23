@@ -1,5 +1,5 @@
 # Frisbii Pay
-Lastest version: 1.3.9
+Lastest version: 1.3.10
 
 ## Information
 Compatible with Prestashop versions: 8, 9
@@ -16,7 +16,5 @@ Compatible with Prestashop versions: 8, 9
  - php >= 8.0
 
 ## Last Changelog
-v 1.3.9
+v 1.3.10
 - [Fix] - Payment improvements.
-- [Feature] - Support new Klarna payment option for all previous Klarna options.
-- [Feature] - Supports Visa & Mastercard Click-to-pay.

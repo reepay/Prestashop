@@ -15,9 +15,9 @@
 <div class="row">
 	<div class="col-xs-12 col-md-12">
 		<p class="payment_module" id="reepay_payment_button">
-			<a href="{$link->getModuleLink('reepay', 'payment', array(), true)|escape:'htmlall':'UTF-8'}" title="{$paymentOptionText}">
-				<img src="{$module_dir|escape:'htmlall':'UTF-8'}/views/img/logo.png" alt="{$paymentOptionText}" height="32" />
-				{$paymentOptionText}
+			<a href="{$link->getModuleLink('reepay', 'payment', array(), true)|escape:'htmlall':'UTF-8'}" title="{$paymentOptionText|escape:'html':'UTF-8'}">
+				<img src="{$module_dir|escape:'htmlall':'UTF-8'}/views/img/logo.png" alt="{$paymentOptionText|escape:'html':'UTF-8'}" height="32" />
+				{$paymentOptionText|escape:'html':'UTF-8'}
 			</a>
 		</p>
 	</div>
